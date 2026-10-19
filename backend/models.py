@@ -2,9 +2,10 @@
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 Status = Literal["waiting", "in_progress", "awaiting_sign_off", "decided"]
+StepKind = Literal["tool_call", "tool_result", "reply", "error"]
 
 
 class Item(BaseModel):
@@ -121,3 +122,30 @@ class Handler(BaseModel):
     role: str
     email: str
     can_approve_over_limit: bool
+
+
+class Step(BaseModel):
+    step_id: int
+    kind: StepKind
+    text: str
+    created_at: str
+
+
+class NewStep(BaseModel):
+    kind: StepKind
+    text: str
+
+
+class NewDecision(BaseModel):
+    decision: Literal["approve", "decline", "refer"]
+    payout: float = Field(ge=0)
+    reasons: str = Field(min_length=1)
+    policy_section: str = Field(min_length=1)
+
+
+class NewPayment(BaseModel):
+    amount: float = Field(gt=0)
+
+
+class NewSignOff(BaseModel):
+    handler_id: str

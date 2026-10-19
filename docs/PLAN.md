@@ -107,13 +107,13 @@ Build the operations that move a claim through its states, with every rule enfor
 
 Success criteria:
 
-- [ ] Tests pass for each move in the state diagram, and for each refusal: starting a claim that isn't waiting, deciding a claim that isn't in progress, deciding twice, a decline with a payout, an approval with no payout, an unknown decision, empty reasons, paying a decline, paying the wrong amount, paying twice, signing off a claim that isn't awaiting sign-off, and signing off with an unknown handler
-- [ ] A test approves a claim at $1,150.00, then calls `pay_claim` with $1,150.00 and gets `409` with the approval-limit reason, then with $1,000.00 and still gets `409`; the claim stays `awaiting_sign_off` and unpaid
-- [ ] A test signs that claim off as HND-01, and the claim becomes `decided` with one payment of $1,150.00 and the sign-off recorded
-- [ ] A test approves a claim at exactly $1,000.00, which becomes `decided` and can be paid
-- [ ] `release_claim` returns an undecided claim to `waiting` and leaves a decided claim as it is
-- [ ] With `npm run dev:backend` running, the same over-limit refusal shows with `curl` on CLM-1002 (then reset with `uv run -m backend.seed`)
-- [ ] `npm run check:python` passes with coverage at or above 80%
+- [x] Tests pass for each move in the state diagram, and for each refusal: starting a claim that isn't waiting, deciding a claim that isn't in progress, deciding twice, a decline with a payout, an approval with no payout, an unknown decision, empty reasons, paying a decline, paying the wrong amount, paying twice, signing off a claim that isn't awaiting sign-off, and signing off with an unknown handler
+- [x] A test approves a claim at $1,150.00, then calls `pay_claim` with $1,150.00 and gets `409` with the approval-limit reason, then with $1,000.00 and still gets `409`; the claim stays `awaiting_sign_off` and unpaid
+- [x] A test signs that claim off as HND-01, and the claim becomes `decided` with one payment of $1,150.00 and the sign-off recorded
+- [x] A test approves a claim at exactly $1,000.00, which becomes `decided` and can be paid
+- [x] `release_claim` returns an undecided claim to `waiting` and leaves a decided claim as it is
+- [x] With `npm run dev:backend` running, the same over-limit refusal shows with `curl` on CLM-1002 (then reset with `uv run -m backend.seed`)
+- [x] `npm run check:python` passes with coverage at or above 80%
 
 ## Phase 3: The UnderCover Agent
 
