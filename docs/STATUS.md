@@ -16,6 +16,7 @@ The claims pilot from `docs/PLAN.md` is built: all six phases.
 
 - `npm run dev` starts the backend on port 8000 and the dashboard at http://localhost:5173.
 - "Run the agent" on a claim, or `uv run -m agent CLM-1001` with the backend running, runs the agent on one claim. Each run calls the model, a few cents with the default model.
+- `uv run -m agent`, with the backend running, works every waiting claim in the queue in turn and prints each result as it finishes. A claim that fails is reported and returned to waiting, and the queue carries on. The full queue is 25 model runs.
 - `uv run -m backend.seed` resets the database to the data in `data/`.
 - `npm run check` runs every check.
 

@@ -1,3 +1,5 @@
+import runpy
+import sys
 from pathlib import Path
 
 import pytest
@@ -155,3 +157,52 @@ def test_model_name(monkeypatch):
     assert main.model().model_name == "openai/gpt-6-luna"
     monkeypatch.setenv("MODEL_NAME", "openrouter/free")
     assert main.model().model_name == "openrouter/free"
+
+
+def test_waiting_claims():
+    assert len(main.waiting_claims()) == 25
+    client.post("/api/claims/CLM-1001/start")
+    assert "CLM-1001" not in main.waiting_claims()
+
+
+def test_run_queue_works_each_claim_in_turn():
+    model = stub(
+        decision("CLM-1001", "decline", 0),
+        AIMessage(content="Declined CLM-1001."),
+        decision("CLM-1002", "refer", 0),
+        AIMessage(content="Referred CLM-1002."),
+    )
+    assert list(main.run_queue(["CLM-1001", "CLM-1002"], model)) == [
+        ("CLM-1001", "Declined CLM-1001."),
+        ("CLM-1002", "Referred CLM-1002."),
+    ]
+    claims = client.get("/api/claims").json()
+    assert [claim["decision"] for claim in claims[:2]] == ["decline", "refer"]
+
+
+def test_run_queue_carries_on_after_a_failure():
+    client.post("/api/claims/CLM-1001/start")
+    model = stub(decision("CLM-1002", "decline", 0), AIMessage(content="Declined."))
+    results = list(main.run_queue(["CLM-1001", "CLM-1002"], model))
+    assert results[0][0] == "CLM-1001"
+    assert results[0][1].startswith("Failed: Client error '409 Conflict'")
+    assert results[1] == ("CLM-1002", "Declined.")
+
+
+def test_command_runs_the_queue(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["agent"])
+    monkeypatch.setattr(main, "waiting_claims", lambda: ["CLM-1001", "CLM-1002"])
+    monkeypatch.setattr(
+        main, "run_queue", lambda ids: ((claim_id, "Done.") for claim_id in ids)
+    )
+    runpy.run_module("agent", run_name="__main__")
+    assert capsys.readouterr().out == (
+        "2 claims waiting\nCLM-1001: Done.\nCLM-1002: Done.\n"
+    )
+
+
+def test_command_runs_one_claim(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["agent", "CLM-1001"])
+    monkeypatch.setattr(main, "run", lambda claim_id, thread_id: f"{claim_id} done.")
+    runpy.run_module("agent", run_name="__main__")
+    assert capsys.readouterr().out == "CLM-1001 done.\n"

@@ -3,6 +3,7 @@
 import os
 from collections.abc import Iterator
 from typing import Literal
+from uuid import uuid4
 
 import httpx
 from dotenv import load_dotenv
@@ -155,3 +156,24 @@ def run(claim_id: str, thread_id: str, llm: BaseChatModel | None = None) -> str:
         finally:
             client.post(f"/api/claims/{claim_id}/release")
         return final
+
+
+def waiting_claims() -> list[str]:
+    """Return the ids of the claims waiting in the queue."""
+    with backend() as client:
+        claims = client.get("/api/claims").json()
+    return [claim["claim_id"] for claim in claims if claim["status"] == "waiting"]
+
+
+def run_queue(
+    claim_ids: list[str], llm: BaseChatModel | None = None
+) -> Iterator[tuple[str, str]]:
+    """Run the agent on each claim in turn, yielding each claim's final reply.
+
+    A claim that fails is reported and the queue carries on with the next one.
+    """
+    for claim_id in claim_ids:
+        try:
+            yield claim_id, run(claim_id, str(uuid4()), llm)
+        except Exception as error:
+            yield claim_id, f"Failed: {error}"
