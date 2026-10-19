@@ -181,11 +181,11 @@ Make the end-to-end tests run on their own servers, test the whole workflow, and
 - `playwright.config.ts`: a backend on port 8001 with `DATABASE_PATH` in `e2e/test-results/`, reseeded on each run, and a dashboard on port 5174 that proxies to it.
 - `dashboard/vite.config.ts`: the proxy target read from `BACKEND_URL`, defaulting to port 8000.
 - `e2e/claim.spec.ts`: drives a claim through the API in place of the model, then checks the dashboard at each stage.
-- `README.md` section for the product, kept short, and `docs/STATUS.md`.
+- `docs/STATUS.md`, with how to run the product. (The plan first named a `README.md` section too, but the README is the course's own and changes upstream, so the run steps live in `docs/STATUS.md` alone.)
 
 Success criteria:
 
-- [ ] `npm run e2e` passes, with tests that: the queue shows 25 claims; CLM-1001 shows its details; the instructions page shows the instructions; a claim started and given steps through the API shows them; a claim approved under the limit and paid shows `Decided` and paid; a claim approved over the limit shows the blocked payment, and signing off in the dashboard makes it decided and paid
-- [ ] `npm run e2e` passes a second time in a row, and with `npm run dev` running at the same time, and the dev database is unchanged afterwards
-- [ ] `docs/STATUS.md` says what's built, how to run it, how to reset the database and how to run the agent
-- [ ] `npm run check` passes in full: ruff, pyright, pytest at 80% or more, ESLint, Prettier, tsc, vitest at 80% or more, and Playwright
+- [x] `npm run e2e` passes, with tests that: the queue shows 25 claims; CLM-1001 shows its details; the instructions page shows the instructions; a claim started and given steps through the API shows them; a claim approved under the limit and paid shows `Decided` and paid; a claim approved over the limit shows the blocked payment, and signing off in the dashboard makes it decided and paid
+- [x] `npm run e2e` passes a second time in a row, and with `npm run dev` running at the same time, and the dev database is unchanged afterwards
+- [x] `docs/STATUS.md` says what's built, how to run it, how to reset the database and how to run the agent
+- [x] `npm run check` passes in full: ruff, pyright, pytest at 80% or more, ESLint, Prettier, tsc, vitest at 80% or more, and Playwright
