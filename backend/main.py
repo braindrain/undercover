@@ -7,10 +7,12 @@ from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
 
+from agent import main as agent
 from backend import db
 from backend.models import (
     Claim,
@@ -295,4 +297,12 @@ def sign_off_claim(claim_id: str, sign_off: NewSignOff, conn: Database) -> Claim
     )
     pay(conn, claim_id, find(conn, "decisions", "claim_id", claim_id)["payout"])
     set_status(conn, claim_id, "decided")
+    return load_claim(conn, claim_id)
+
+
+@app.post("/api/claims/{claim_id}/run", operation_id="run_agent", status_code=202)
+def run_agent(claim_id: str, background: BackgroundTasks, conn: Database) -> Claim:
+    """Start the agent on a waiting claim, in the background."""
+    require_status(load_claim(conn, claim_id), "waiting", "run")
+    background.add_task(agent.run, claim_id, str(uuid4()))
     return load_claim(conn, claim_id)

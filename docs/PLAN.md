@@ -127,15 +127,15 @@ Build the agent's tools, its instructions, its run with recorded steps, and the 
 
 Success criteria:
 
-- [ ] A stub-model test runs CLM-1001 through `get_claim`, `get_policy`, `get_claim_history`, `record_decision` (approve) and `pay_claim`; the claim ends `decided` and paid, and its steps list each tool call and the final reply in order
-- [ ] A stub-model test approves CLM-1002 at $1,150.00 and tries to pay it; the tool returns the approval-limit reason, the claim ends `awaiting_sign_off` and unpaid
-- [ ] A stub-model test declines a claim; it ends `decided` with no payment
-- [ ] A stub-model test whose model raises an error leaves the claim `waiting`, not `in_progress`
-- [ ] A test checks that the system prompt is the instructions from the API followed by the policy wording from the API
-- [ ] A test checks that `run_agent` on a waiting claim starts the run (with `agent.run` replaced) and returns `202`, and on a claim in progress returns `409`
-- [ ] No file in `agent/` mentions `data/` (a test checks this), so the agent can only reach the records through the API
-- [ ] Live check, one claim, a few cents at most: with `npm run dev:backend` running, `uv run -m agent CLM-1001` records a decision with reasons and a policy section, and `curl` shows the claim's steps; then reset with `uv run -m backend.seed`
-- [ ] `npm run check:python` passes with coverage at or above 80%
+- [x] A stub-model test runs CLM-1001 through `get_claim`, `get_policy`, `get_claim_history`, `record_decision` (approve) and `pay_claim`; the claim ends `decided` and paid, and its steps list each tool call and the final reply in order
+- [x] A stub-model test approves CLM-1002 at $1,150.00 and tries to pay it; the tool returns the approval-limit reason, the claim ends `awaiting_sign_off` and unpaid
+- [x] A stub-model test declines a claim; it ends `decided` with no payment
+- [x] A stub-model test whose model raises an error leaves the claim `waiting`, not `in_progress`
+- [x] A test checks that the system prompt is the instructions from the API followed by the policy wording from the API
+- [x] A test checks that `run_agent` on a waiting claim starts the run (with `agent.run` replaced) and returns `202`, and on a claim in progress returns `409`
+- [x] No file in `agent/` mentions `data/` (a test checks this), so the agent can only reach the records through the API
+- [x] Live check, one claim, a few cents at most: with `npm run dev:backend` running, `uv run -m agent CLM-1001` records a decision with reasons and a policy section, and `curl` shows the claim's steps; then reset with `uv run -m backend.seed`
+- [x] `npm run check:python` passes with coverage at or above 80%
 
 ## Phase 4: The dashboard's frame, queue and instructions
 
