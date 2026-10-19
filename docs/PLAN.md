@@ -151,11 +151,11 @@ Build the brand, the layout, the routing, the API client and two of the three pa
 
 Success criteria:
 
-- [ ] Vitest tests pass for the queue (the counts by state, a row per claim, a decided claim's decision and payout), the instructions page, the routing and `formatMoney` (1250 shows as $1,250.00)
-- [ ] `npm run check:ts` passes, with strict TypeScript, no `any` and coverage at or above 80%
-- [ ] In the browser with the Playwright MCP server, at `http://localhost:5173`: the queue shows 25 claims, all Waiting, with the counts at the top; the fonts are Instrument Sans and JetBrains Mono; a screenshot in light mode and one in dark mode match the brand, with no edge borders and no thin line across the top
-- [ ] The instructions page shows the text of `backend/instructions.md`, with no way to edit it
-- [ ] The browser console shows no errors
+- [x] Vitest tests pass for the queue (the counts by state, a row per claim, a decided claim's decision and payout), the instructions page, the routing and `formatMoney` (1250 shows as $1,250.00)
+- [x] `npm run check:ts` passes, with strict TypeScript, no `any` and coverage at or above 80%
+- [x] In the browser with the Playwright MCP server, at `http://localhost:5173`: the queue shows 25 claims, all Waiting, with the counts at the top; the fonts are Instrument Sans and JetBrains Mono; a screenshot in light mode and one in dark mode match the brand, with no edge borders and no thin line across the top
+- [x] The instructions page shows the text of `backend/instructions.md`, with no way to edit it
+- [x] The browser console shows no errors
 
 ## Phase 5: The claim page
 
