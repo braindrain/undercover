@@ -71,7 +71,7 @@ The rules, all checked in the backend:
 ### The dashboard
 
 - **Queue** (`#/`): a count of claims in each state, then a table of every claim with its status and, once decided, its decision and payout. It refreshes every 5 seconds.
-- **Claim** (`#/claims/CLM-1001`): the summary, the story, the items, the documents, the policy and the customer with their earlier claims. Beside them, the agent's decision with its reasons, policy section, payout and payment, and the steps as a timeline. "Run the agent" shows on a waiting claim. On a claim awaiting sign-off, a handler picker and "Sign off and pay". The page refreshes every 2 seconds while the claim is in progress.
+- **Claim** (`#/claims/CLM-1001`): the summary, the story, the items, the documents, the policy and the customer with their earlier claims. Beside them, the agent's decision with its reasons, policy section, payout and payment, and the steps as a timeline. "Run the agent" shows on a waiting claim. On a claim awaiting sign-off, a handler picker and "Sign off and pay". The claim refreshes every 2 seconds, and the steps refresh while the claim is waiting or in progress, so a run started anywhere shows up.
 - **Instructions** (`#/instructions`): the agent's instructions, read only, with a note that the policy wording is added after them.
 - The brand: Instrument Sans, Instrument Serif for the tagline, JetBrains Mono for ids and amounts. Light and dark modes. The states use the brand's four colors in order: `decided` Sea Green, `in_progress` Marigold, `awaiting_sign_off` Coral, `waiting` Cerulean. Raspberry is kept for alerts, such as a blocked payment. Money shows as $1,250.00.
 
@@ -166,13 +166,13 @@ Build the claim page, with the decision, the live steps, running the agent and s
 
 Success criteria:
 
-- [ ] Vitest tests pass for a waiting claim (details shown, "Run the agent" calls `run_agent`), a claim in progress (steps shown, the page refreshes), a decided claim (decision, reasons, policy section, payout and payment shown) and a claim awaiting sign-off (a handler picked, "Sign off and pay" calls `sign_off_claim`, and the page shows it paid)
-- [ ] In the browser with the Playwright MCP server, CLM-1001 shows its story, its three items, its four documents, its Premium policy and Maya Patel with her earlier claim
-- [ ] In the browser, with the dev servers running, clicking "Run the agent" on CLM-1001 shows the steps appear one by one as the live agent works, then the decision and the payment (a live run of one claim, a few cents at most)
-- [ ] In the browser, CLM-1002 taken through the API to an approval of $1,150.00 shows "Waiting for sign-off" and a blocked payment; signing off as Dana Whitfield shows it decided and paid
-- [ ] Screenshots of a decided claim in light and dark mode match the brand
-- [ ] `uv run -m backend.seed` resets the database after these checks
-- [ ] `npm run check:ts` passes with coverage at or above 80%
+- [x] Vitest tests pass for a waiting claim (details shown, "Run the agent" calls `run_agent`), a claim in progress (steps shown, the page refreshes), a decided claim (decision, reasons, policy section, payout and payment shown) and a claim awaiting sign-off (a handler picked, "Sign off and pay" calls `sign_off_claim`, and the page shows it paid)
+- [x] In the browser with the Playwright MCP server, CLM-1001 shows its story, its three items, its four documents, its Premium policy and Maya Patel with her earlier claim
+- [x] In the browser, with the dev servers running, clicking "Run the agent" on CLM-1001 shows the steps appear one by one as the live agent works, then the decision and the payment (a live run of one claim, a few cents at most)
+- [x] In the browser, CLM-1002 taken through the API to an approval of $1,150.00 shows "Waiting for sign-off" and a blocked payment; signing off as Dana Whitfield shows it decided and paid
+- [x] Screenshots of a decided claim in light and dark mode match the brand
+- [x] `uv run -m backend.seed` resets the database after these checks
+- [x] `npm run check:ts` passes with coverage at or above 80%
 
 ## Phase 6: End-to-end tests and handover
 

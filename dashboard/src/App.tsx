@@ -1,3 +1,4 @@
+import { ClaimPage } from "./ClaimPage";
 import { useRoute, type Route } from "./hooks";
 import { InstructionsPage } from "./InstructionsPage";
 import { QueuePage } from "./QueuePage";
@@ -9,7 +10,7 @@ function Page({ route }: Readonly<{ route: Route }>) {
     case "instructions":
       return <InstructionsPage />;
     case "claim":
-      return <h1 className="mono">{route.claimId}</h1>;
+      return <ClaimPage key={route.claimId} claimId={route.claimId} />;
   }
 }
 
