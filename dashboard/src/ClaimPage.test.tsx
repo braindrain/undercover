@@ -44,6 +44,7 @@ function claim(changes: Partial<Claim>): Claim {
       { name: "Hotel receipt", type: "receipt", content: "Total: $245.00." },
     ],
     status: "waiting",
+    failures: 0,
     decision: null,
     payment: null,
     sign_off: null,
@@ -319,4 +320,71 @@ it("shows an unknown claim", async () => {
   expect((await screen.findByRole("alert")).textContent).toBe(
     "No route /api/claims/CLM-1001",
   );
+});
+
+const reads: Step[] = [
+  {
+    step_id: 4,
+    kind: "read",
+    text: "Policy wording: 3. Trip Delay\n\n## 3. Trip Delay\n\nWe pay when your carrier delays you.",
+    created_at: "2026-10-19T17:49:42+00:00",
+  },
+  {
+    step_id: 5,
+    kind: "read",
+    text: "Claims manual: 10. Meals without receipts\n\n## 10. Meals without receipts\n\nA flat $35.",
+    created_at: "2026-10-19T17:49:43+00:00",
+  },
+];
+
+it("lists what the agent read and labels each read in the timeline", async () => {
+  stubFetch(routes(claim({ status: "in_progress" }), [...steps, ...reads]));
+  render(<ClaimPage claimId="CLM-1001" />);
+  const panel = await screen.findByRole("region", {
+    name: "What the agent read",
+  });
+  expect(
+    within(panel)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent),
+  ).toEqual([
+    "Policy wording: 3. Trip Delay",
+    "Claims manual: 10. Meals without receipts",
+  ]);
+  const timeline = screen.getByRole("region", { name: "Steps" });
+  expect(within(timeline).getAllByText("Read")).toHaveLength(2);
+  expect(
+    within(timeline).getByText("Policy wording: 3. Trip Delay"),
+  ).toBeDefined();
+  expect(
+    within(timeline).getByText(/We pay when your carrier delays you\./),
+  ).toBeDefined();
+});
+
+it("says when the agent hasn't read anything", async () => {
+  stubFetch(routes(claim({})));
+  render(<ClaimPage claimId="CLM-1001" />);
+  expect(
+    await screen.findByText("The agent hasn't read any sections yet."),
+  ).toBeDefined();
+});
+
+it("says a claim left for a handler failed twice", async () => {
+  stubFetch(routes(claim({ status: "left_for_handler", failures: 2 })));
+  render(<ClaimPage claimId="CLM-1001" />);
+  expect(await screen.findByText("Left for a handler")).toBeDefined();
+  expect(
+    screen.getByText(
+      "The agent failed on this claim twice, so it's left for a handler.",
+    ),
+  ).toBeDefined();
+  expect(screen.queryByRole("button", { name: "Run the agent" })).toBeNull();
+});
+
+it("says a claim back in the queue failed once", async () => {
+  stubFetch(routes(claim({ failures: 1 })));
+  render(<ClaimPage claimId="CLM-1001" />);
+  expect(
+    await screen.findByText(/The agent failed on this claim once/),
+  ).toBeDefined();
 });

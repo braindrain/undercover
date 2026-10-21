@@ -1,7 +1,12 @@
 export type Status =
-  "waiting" | "in_progress" | "awaiting_sign_off" | "decided";
+  | "waiting"
+  | "in_progress"
+  | "awaiting_sign_off"
+  | "decided"
+  | "left_for_handler";
 export type Verdict = "approve" | "decline" | "refer";
-export type StepKind = "tool_call" | "tool_result" | "reply" | "error";
+export type StepKind = "tool_call" | "tool_result" | "read" | "reply" | "error";
+export type TodoStatus = "todo" | "in_progress" | "done" | "left_for_handler";
 
 export interface ClaimSummary {
   claim_id: string;
@@ -49,6 +54,7 @@ export interface Claim {
   amount_claimed: number;
   documents: ClaimDocument[];
   status: Status;
+  failures: number;
   decision: Decision | null;
   payment: { amount: number; paid_at: string } | null;
   sign_off: { handler_id: string; signed_off_at: string } | null;
@@ -99,11 +105,34 @@ export interface Step {
   created_at: string;
 }
 
+export interface Todo {
+  text: string;
+  status: TodoStatus;
+}
+
+export interface Run {
+  run_id: number;
+  cap: number;
+  status: "running" | "finished";
+  summary: string | null;
+  started_at: string;
+  finished_at: string | null;
+  todos: Todo[];
+}
+
 export const STATUS_LABELS: Record<Status, string> = {
   waiting: "Waiting",
   in_progress: "In progress",
   awaiting_sign_off: "Waiting for sign-off",
   decided: "Decided",
+  left_for_handler: "Left for a handler",
+};
+
+export const TODO_LABELS: Record<TodoStatus, string> = {
+  todo: "To do",
+  in_progress: "In progress",
+  done: "Done",
+  left_for_handler: "Left for a handler",
 };
 
 export const VERDICT_LABELS: Record<Verdict, string> = {
@@ -119,6 +148,13 @@ const money = new Intl.NumberFormat("en-US", {
 
 export function formatMoney(amount: number): string {
   return money.format(amount);
+}
+
+export function formatTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 export function formatLabel(value: string): string {

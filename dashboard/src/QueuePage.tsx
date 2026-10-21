@@ -7,6 +7,7 @@ import {
 } from "./api";
 import { Loading, Money, StatusChip, VerdictChip } from "./components";
 import { useResource } from "./hooks";
+import { RunPanel } from "./RunPanel";
 
 const STATES = Object.keys(STATUS_LABELS) as Status[];
 
@@ -34,6 +35,7 @@ export function QueuePage() {
           </div>
         ))}
       </section>
+      <RunPanel />
       <section className="panel">
         <table className="table">
           <thead>

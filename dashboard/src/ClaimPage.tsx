@@ -1,6 +1,11 @@
 import { useState } from "react";
-import { formatLabel, getJson, post, type Claim } from "./api";
-import { DecisionPanel, SignOffForm, StepsPanel } from "./AgentPanels";
+import { formatLabel, getJson, post, type Claim, type Step } from "./api";
+import {
+  DecisionPanel,
+  ReadPanel,
+  SignOffForm,
+  StepsPanel,
+} from "./AgentPanels";
 import { CustomerPanel, PolicyPanel } from "./ClaimRecords";
 import { Loading, Money, StatusChip } from "./components";
 import { useResource } from "./hooks";
@@ -107,8 +112,14 @@ export function ClaimPage({ claimId }: Readonly<{ claimId: string }>) {
     error,
     reload,
   } = useResource<Claim>(`/api/claims/${claimId}`, getJson, 2000);
+  const live = claim?.status === "waiting" || claim?.status === "in_progress";
+  const steps =
+    useResource<Step[]>(
+      `/api/claims/${claimId}/steps`,
+      getJson,
+      live ? 2000 : null,
+    ).data ?? [];
   if (!claim) return <Loading error={error} />;
-  const live = claim.status === "waiting" || claim.status === "in_progress";
 
   return (
     <>
@@ -133,7 +144,8 @@ export function ClaimPage({ claimId }: Readonly<{ claimId: string }>) {
           {claim.status === "awaiting_sign_off" && (
             <SignOffForm claimId={claimId} onDone={reload} />
           )}
-          <StepsPanel claimId={claimId} live={live} />
+          <ReadPanel steps={steps} />
+          <StepsPanel steps={steps} />
         </div>
       </div>
     </>

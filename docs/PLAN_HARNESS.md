@@ -194,15 +194,15 @@ Show the run and its to-do list on the queue page, what the agent read on the cl
 
 Success criteria:
 
-- [ ] Vitest tests pass for the run panel: no run yet; a running run with its cap and its to-do items, each with its state; a finished run with its summary; and it refreshes every 2 seconds
-- [ ] Vitest tests pass for the queue's fifth tile and the "Left for a handler" chip
-- [ ] Vitest tests pass for the claim page: "What the agent read" lists each `read` step's heading and the timeline labels them "Read"; a claim left for a handler says the agent failed on it twice
-- [ ] Vitest tests pass for the instructions page showing both sets of instructions, read only
-- [ ] `npm run check:ts` passes, with strict TypeScript, no `any` and coverage at or above 80%
-- [ ] In the browser with the Playwright MCP server, with a run and a to-do list made through the API (as the queue agent would): the queue page shows the run panel with each item's state; marking an item done through the API shows it ticked off within a few seconds; finishing the run shows the summary
-- [ ] In the browser, a claim released twice through the API shows "Left for a handler" in the queue and on its page, and a claim with `read` steps posted through the API shows them under "What the agent read"
-- [ ] Screenshots of the queue page with a run, in light and dark mode, match the brand: no edge borders, no thin line across the top, and the to-do chips in the brand's colors
-- [ ] The browser console shows no errors, and `uv run -m backend.seed` resets the database after these checks
+- [x] Vitest tests pass for the run panel: no run yet; a running run with its cap and its to-do items, each with its state; a finished run with its summary; and it refreshes every 2 seconds
+- [x] Vitest tests pass for the queue's fifth tile and the "Left for a handler" chip
+- [x] Vitest tests pass for the claim page: "What the agent read" lists each `read` step's heading and the timeline labels them "Read"; a claim left for a handler says the agent failed on it twice
+- [x] Vitest tests pass for the instructions page showing both sets of instructions, read only
+- [x] `npm run check:ts` passes, with strict TypeScript, no `any` and coverage at or above 80%
+- [x] In the browser with the Playwright MCP server, with a run and a to-do list made through the API (as the queue agent would): the queue page shows the run panel with each item's state; marking an item done through the API shows it ticked off within a few seconds; finishing the run shows the summary
+- [x] In the browser, a claim released twice through the API shows "Left for a handler" in the queue and on its page, and a claim with `read` steps posted through the API shows them under "What the agent read"
+- [x] Screenshots of the queue page with a run, in light and dark mode, match the brand: no edge borders, no thin line across the top, and the to-do chips in the brand's colors
+- [x] The browser console shows no errors, and `uv run -m backend.seed` resets the database after these checks
 
 ## Phase 5: End-to-end tests, a live run and handover
 

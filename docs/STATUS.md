@@ -2,7 +2,7 @@
 
 The claims pilot from `docs/PLAN.md` is built: all six phases.
 
-The agent's harness from `docs/PLAN_HARNESS.md` is in progress: phases 1 to 3 of 5 are built (the backend's records and rules, the claim agent's harness and the queue agent). After pulling this build, reset the database with `uv run -m backend.seed`, since the tables have changed.
+The agent's harness from `docs/PLAN_HARNESS.md` is in progress: phases 1 to 4 of 5 are built (the backend's records and rules, the claim agent's harness, the queue agent and the dashboard). After pulling this build, reset the database with `uv run -m backend.seed`, since the tables have changed.
 
 ## What's built
 
@@ -10,9 +10,9 @@ The agent's harness from `docs/PLAN_HARNESS.md` is in progress: phases 1 to 3 of
 - `agent/`: the UnderCover Agent on `deepseek/deepseek-v4.1-flash` with low reasoning effort, or `MODEL_NAME`. The claim agent, `run(claim_id, thread_id)` in `agent/main.py`, takes the claim instructions from the backend as its system prompt and works the claim with seven tools over the API (`agent/tools.py`): `get_claim`, `get_policy`, `get_claim_history`, `list_sections`, `read_section`, `record_decision` and `pay_claim`. It looks up the sections of the wording and the manual it needs rather than being handed them. Its middleware (`agent/middleware.py`) records each reply, tool call and result as a step, with each section read as a `read` step; retries a failed model call three times and a tool call that can't reach the backend twice; and stops a claim at 30 model calls. A run that ends without a decision releases the claim, which counts a failure.
   - The queue agent, `run_queue(cap, thread_id)` in `agent/queue.py`, starts a run in the backend and works the queue with three tools: `list_waiting_claims`, `write_todos`, which stores its to-do list in the backend, and `work_claim`, which hands one claim to a fresh claim agent and returns a one-line report built from the claim's record, such as "CLM-1001: approved, $420.00, paid.". `work_claim` enforces the cap, counting each claim once however often it's retried, and turns a claim agent's failure into its report so the run carries on. A middleware sends the agent back to work if it tries to finish while a claim it can still work is waiting. The run finishes with the agent's summary, or with the error if the queue agent itself fails.
 - `dashboard/`: the claims desk in the UnderCover brand, light and dark.
-  - The queue (`#/`), with counts by state, refreshing every 5 seconds.
-  - Each claim (`#/claims/CLM-1001`): the story, items, documents, policy and customer, the agent's decision and payment, and its steps as they happen. "Run the agent" on a waiting claim, and "Sign off and pay" on a claim waiting for sign-off.
-  - The agent's instructions and the policy wording, read only (`#/instructions`).
+  - The queue (`#/`), with counts in each of the five states, refreshing every 5 seconds, and the agent's latest run above the table: its state, cap, start and finish, its to-do list with each item's state, and its summary, refreshing every 2 seconds.
+  - Each claim (`#/claims/CLM-1001`): the story, items, documents, policy and customer, the agent's decision and payment, what the agent read, and its steps as they happen, with each section read labeled "Read". A claim left for a handler says the agent failed on it twice. "Run the agent" on a waiting claim, and "Sign off and pay" on a claim waiting for sign-off.
+  - The agent's instructions for running the queue and for working a claim, with the policy wording and the claims manual below, read only (`#/instructions`).
 - `e2e/`: Playwright tests of the queue, the instructions, a claim in full, live steps, a payment, and the sign-off of a payout over the limit. They run on their own servers (ports 8001 and 5174) with their own database, `e2e/undercover-e2e.db`, reseeded on each run.
 
 ## Running it

@@ -139,7 +139,7 @@ h3 {
 
 .tiles {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
 }
 
@@ -187,12 +187,14 @@ h3 {
   white-space: nowrap;
 }
 
-.chip-waiting {
+.chip-waiting,
+.chip-todo {
   background: var(--cerulean);
   color: #ffffff;
 }
 
 .chip-in_progress,
+.chip-running,
 .chip-refer {
   background: var(--marigold);
 }
@@ -203,8 +205,15 @@ h3 {
 }
 
 .chip-decided,
+.chip-done,
+.chip-finished,
 .chip-approve {
   background: var(--sea-green);
+}
+
+.chip-left_for_handler {
+  background: var(--raspberry);
+  color: #ffffff;
 }
 
 .dot {
@@ -229,6 +238,10 @@ h3 {
 
 .dot-decided {
   background: var(--sea-green);
+}
+
+.dot-left_for_handler {
+  background: var(--raspberry);
 }
 
 .prose {
@@ -370,6 +383,10 @@ select {
   color: var(--marigold-text);
 }
 
+.step-read .step-label {
+  color: var(--link);
+}
+
 .step-error {
   background: var(--raspberry);
   color: #ffffff;
@@ -399,4 +416,30 @@ select {
 
 .panel .alert {
   margin: 12px 0 0;
+}
+
+.todos {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.todo {
+  display: grid;
+  grid-template-columns: 9.5em 1fr;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.todo .chip {
+  justify-self: start;
+}
+
+.reads {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
 }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   formatMoney,
+  formatTime,
   getJson,
   post,
   type Claim,
@@ -16,16 +17,10 @@ const APPROVAL_LIMIT = 1000;
 const STEP_LABELS: Record<StepKind, string> = {
   tool_call: "Tool call",
   tool_result: "Result",
+  read: "Read",
   reply: "Agent",
   error: "Error",
 };
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleString("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
 
 function useHandlers() {
   return useResource<Handler[]>("/api/handlers", getJson, null).data ?? [];
@@ -72,9 +67,70 @@ export function DecisionPanel({ claim }: Readonly<{ claim: Claim }>) {
           {decision.decision === "approve" && <Payment claim={claim} />}
         </>
       ) : (
-        <p className="muted">No decision yet.</p>
+        <NoDecision claim={claim} />
       )}
     </section>
+  );
+}
+
+function NoDecision({ claim }: Readonly<{ claim: Claim }>) {
+  if (claim.status === "left_for_handler")
+    return (
+      <p className="alert">
+        The agent failed on this claim twice, so it's left for a handler.
+      </p>
+    );
+  if (claim.failures)
+    return (
+      <p className="muted">
+        No decision yet. The agent failed on this claim once, and it's back in
+        the queue.
+      </p>
+    );
+  return <p className="muted">No decision yet.</p>;
+}
+
+function heading(step: Step): string {
+  return step.text.split("\n", 1)[0] ?? "";
+}
+
+export function ReadPanel({ steps }: Readonly<{ steps: Step[] }>) {
+  const reads = steps.filter((step) => step.kind === "read");
+  return (
+    <section className="panel" aria-label="What the agent read">
+      <h2>What the agent read</h2>
+      {reads.length ? (
+        <ul className="reads">
+          {reads.map((step) => (
+            <li key={step.step_id}>{heading(step)}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">The agent hasn't read any sections yet.</p>
+      )}
+    </section>
+  );
+}
+
+function StepText({ step }: Readonly<{ step: Step }>) {
+  if (step.kind === "tool_result")
+    return (
+      <details>
+        <summary className="mono step-preview">{step.text}</summary>
+        <pre className="mono step-text">{step.text}</pre>
+      </details>
+    );
+  if (step.kind === "read")
+    return (
+      <details>
+        <summary className="step-preview">{heading(step)}</summary>
+        <pre className="prose step-text">
+          {step.text.slice(heading(step).length).trim()}
+        </pre>
+      </details>
+    );
+  return (
+    <span className={step.kind === "tool_call" ? "mono" : ""}>{step.text}</span>
   );
 }
 
@@ -131,33 +187,16 @@ export function SignOffForm({
   );
 }
 
-export function StepsPanel({
-  claimId,
-  live,
-}: Readonly<{ claimId: string; live: boolean }>) {
-  const { data: steps } = useResource<Step[]>(
-    `/api/claims/${claimId}/steps`,
-    getJson,
-    live ? 2000 : null,
-  );
+export function StepsPanel({ steps }: Readonly<{ steps: Step[] }>) {
   return (
     <section className="panel" aria-label="Steps">
       <h2>What the agent did</h2>
-      {steps?.length ? (
+      {steps.length ? (
         <ol className="steps">
           {steps.map((step) => (
             <li key={step.step_id} className={`step step-${step.kind}`}>
               <span className="step-label">{STEP_LABELS[step.kind]}</span>
-              {step.kind === "tool_result" ? (
-                <details>
-                  <summary className="mono step-preview">{step.text}</summary>
-                  <pre className="mono step-text">{step.text}</pre>
-                </details>
-              ) : (
-                <span className={step.kind === "tool_call" ? "mono" : ""}>
-                  {step.text}
-                </span>
-              )}
+              <StepText step={step} />
             </li>
           ))}
         </ol>
