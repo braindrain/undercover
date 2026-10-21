@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { formatLabel, formatMoney, post } from "./api";
+import { formatLabel, formatMoney, signOff } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -17,11 +17,11 @@ it("formats labels", () => {
 it("posts JSON", async () => {
   const fetchMock = vi.fn().mockResolvedValue(new Response("{}"));
   vi.stubGlobal("fetch", fetchMock);
-  await post("/api/claims/CLM-1001/payments", { amount: 420 });
-  expect(fetchMock).toHaveBeenCalledWith("/api/claims/CLM-1001/payments", {
+  await signOff("CLM-1002", "HND-002");
+  expect(fetchMock).toHaveBeenCalledWith("/api/claims/CLM-1002/sign-off", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: '{"amount":420}',
+    body: '{"handler_id":"HND-002"}',
   });
 });
 
@@ -34,7 +34,7 @@ it("raises the backend's reason for refusing", async () => {
       }),
     ),
   );
-  await expect(post("/api/claims/CLM-1001/payments")).rejects.toThrow(
+  await expect(signOff("CLM-1001", "HND-002")).rejects.toThrow(
     "CLM-1001 has already been paid.",
   );
 });

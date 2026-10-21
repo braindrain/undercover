@@ -8,10 +8,10 @@ from pathlib import Path
 DATA = Path(__file__).parent.parent / "data"
 DEFAULT_PATH = Path(__file__).parent / "undercover.db"
 
-SEED_TABLES = {
-    "policies": "policy_id",
-    "customers": "customer_id",
-    "handlers": "handler_id",
+SEEDS = {
+    "policies.json": ("policy_id", "INSERT INTO policies VALUES (?, ?)"),
+    "customers.json": ("customer_id", "INSERT INTO customers VALUES (?, ?)"),
+    "handlers.json": ("handler_id", "INSERT INTO handlers VALUES (?, ?)"),
 }
 
 SCHEMA = """
@@ -97,12 +97,9 @@ def seed(conn: sqlite3.Connection) -> None:
             "INSERT INTO claims (claim_id, status, data) VALUES (?, 'waiting', ?)",
             (claim["claim_id"], json.dumps(claim)),
         )
-    for table, key in SEED_TABLES.items():
-        for record in json.loads(read_data(f"{table}.json")):
-            conn.execute(
-                f"INSERT INTO {table} VALUES (?, ?)",  # noqa: S608
-                (record[key], json.dumps(record)),
-            )
+    for name, (key, insert) in SEEDS.items():
+        for record in json.loads(read_data(name)):
+            conn.execute(insert, (record[key], json.dumps(record)))
     conn.commit()
 
 

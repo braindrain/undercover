@@ -1,18 +1,15 @@
 import { useState } from "react";
 import {
-  formatMoney,
+  endpoints,
+  errorMessage,
   formatTime,
-  getJson,
-  post,
+  signOff as sendSignOff,
   type Claim,
-  type Handler,
   type Step,
   type StepKind,
 } from "./api";
 import { Money, VerdictChip } from "./components";
 import { useResource } from "./hooks";
-
-const APPROVAL_LIMIT = 1000;
 
 const STEP_LABELS: Record<StepKind, string> = {
   tool_call: "Tool call",
@@ -23,7 +20,7 @@ const STEP_LABELS: Record<StepKind, string> = {
 };
 
 function useHandlers() {
-  return useResource<Handler[]>("/api/handlers", getJson, null).data ?? [];
+  return useResource(endpoints.handlers, null).data ?? [];
 }
 
 function Payment({ claim }: Readonly<{ claim: Claim }>) {
@@ -43,8 +40,8 @@ function Payment({ claim }: Readonly<{ claim: Claim }>) {
   if (claim.status === "awaiting_sign_off") {
     return (
       <p className="alert">
-        Payment blocked: the payout is over the {formatMoney(APPROVAL_LIMIT)}{" "}
-        approval limit and waits for a handler's sign-off.
+        Payment blocked: the payout is over the approval limit and waits for a
+        handler's sign-off.
       </p>
     );
   }
@@ -147,12 +144,9 @@ export function SignOffForm({
 
   const signOff = () => {
     if (!chosen) return;
-    post(`/api/claims/${claimId}/sign-off`, { handler_id: chosen }).then(
-      onDone,
-      (reason: unknown) => {
-        setError(reason instanceof Error ? reason.message : String(reason));
-      },
-    );
+    sendSignOff(claimId, chosen).then(onDone, (reason: unknown) => {
+      setError(errorMessage(reason));
+    });
   };
 
   return (

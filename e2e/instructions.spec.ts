@@ -10,7 +10,7 @@ test("both sets of instructions are shown read only", async ({ page }) => {
   await expect(
     page
       .getByRole("region", { name: "Working a claim" })
-      .getByText(/You work one claim from a clean start/),
+      .getByText(/You are given one claim/),
   ).toBeVisible();
   await expect(
     page.getByText("The policy wording", { exact: true }),

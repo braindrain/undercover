@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { formatLabel, getJson, post, type Claim, type Step } from "./api";
+import {
+  endpoints,
+  errorMessage,
+  formatLabel,
+  runAgent,
+  type Claim,
+} from "./api";
 import {
   DecisionPanel,
   ReadPanel,
@@ -19,9 +25,9 @@ function RunButton({
 
   const run = () => {
     setStarting(true);
-    post(`/api/claims/${claimId}/run`).then(onStarted, (reason: unknown) => {
+    runAgent(claimId).then(onStarted, (reason: unknown) => {
       setStarting(false);
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(errorMessage(reason));
     });
   };
 
@@ -111,14 +117,10 @@ export function ClaimPage({ claimId }: Readonly<{ claimId: string }>) {
     data: claim,
     error,
     reload,
-  } = useResource<Claim>(`/api/claims/${claimId}`, getJson, 2000);
+  } = useResource(endpoints.claim(claimId), 2000);
   const live = claim?.status === "waiting" || claim?.status === "in_progress";
   const steps =
-    useResource<Step[]>(
-      `/api/claims/${claimId}/steps`,
-      getJson,
-      live ? 2000 : null,
-    ).data ?? [];
+    useResource(endpoints.steps(claimId), live ? 2000 : null).data ?? [];
   if (!claim) return <Loading error={error} />;
 
   return (

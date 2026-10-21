@@ -1,13 +1,9 @@
-import { formatLabel, getJson, type Customer, type Policy } from "./api";
+import { endpoints, formatLabel } from "./api";
 import { Loading, Money } from "./components";
 import { useResource } from "./hooks";
 
 export function PolicyPanel({ policyId }: Readonly<{ policyId: string }>) {
-  const { data: policy, error } = useResource<Policy>(
-    `/api/policies/${policyId}`,
-    getJson,
-    null,
-  );
+  const { data: policy, error } = useResource(endpoints.policy(policyId), null);
   return (
     <section className="panel" aria-label="Policy">
       <h2>
@@ -49,9 +45,8 @@ export function PolicyPanel({ policyId }: Readonly<{ policyId: string }>) {
 export function CustomerPanel({
   customerId,
 }: Readonly<{ customerId: string }>) {
-  const { data: customer, error } = useResource<Customer>(
-    `/api/customers/${customerId}`,
-    getJson,
+  const { data: customer, error } = useResource(
+    endpoints.customer(customerId),
     null,
   );
   if (!customer) return <Loading error={error} />;

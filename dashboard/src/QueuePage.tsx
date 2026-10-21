@@ -1,10 +1,4 @@
-import {
-  formatLabel,
-  getJson,
-  STATUS_LABELS,
-  type ClaimSummary,
-  type Status,
-} from "./api";
+import { endpoints, formatLabel, STATUS_LABELS, type Status } from "./api";
 import { Loading, Money, StatusChip, VerdictChip } from "./components";
 import { useResource } from "./hooks";
 import { RunPanel } from "./RunPanel";
@@ -12,11 +6,7 @@ import { RunPanel } from "./RunPanel";
 const STATES = Object.keys(STATUS_LABELS) as Status[];
 
 export function QueuePage() {
-  const { data: claims, error } = useResource<ClaimSummary[]>(
-    "/api/claims",
-    getJson,
-    5000,
-  );
+  const { data: claims, error } = useResource(endpoints.claims, 5000);
   if (!claims) return <Loading error={error} />;
 
   return (

@@ -7,12 +7,11 @@ from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
-from uuid import uuid4
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
 
-from agent import main as agent
+from agent.agents import work_claim
 from backend import db, documents
 from backend.documents import DocumentName
 from backend.models import (
@@ -58,36 +57,56 @@ def database() -> Iterator[sqlite3.Connection]:
 Database = Annotated[sqlite3.Connection, Depends(database)]
 
 
-def find(conn: sqlite3.Connection, table: str, key: str, value: str) -> sqlite3.Row:
+Table = Literal[
+    "claims",
+    "policies",
+    "customers",
+    "handlers",
+    "decisions",
+    "payments",
+    "sign_offs",
+    "runs",
+]
+
+LOOKUPS: dict[Table, str] = {
+    "claims": "SELECT * FROM claims WHERE claim_id = ?",
+    "policies": "SELECT * FROM policies WHERE policy_id = ?",
+    "customers": "SELECT * FROM customers WHERE customer_id = ?",
+    "handlers": "SELECT * FROM handlers WHERE handler_id = ?",
+    "decisions": "SELECT * FROM decisions WHERE claim_id = ?",
+    "payments": "SELECT * FROM payments WHERE claim_id = ?",
+    "sign_offs": "SELECT * FROM sign_offs WHERE claim_id = ?",
+    "runs": "SELECT * FROM runs WHERE run_id = ?",
+}
+
+
+def lookup(conn: sqlite3.Connection, table: Table, record_id: str | int) -> dict | None:
+    """Return one row by its id, or None."""
+    row = conn.execute(LOOKUPS[table], (record_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def find(conn: sqlite3.Connection, table: Table, record_id: str | int) -> dict:
     """Return one row by its id, or raise a 404."""
-    row = conn.execute(
-        f"SELECT * FROM {table} WHERE {key} = ?",  # noqa: S608
-        (value,),
-    ).fetchone()
+    row = lookup(conn, table, record_id)
     if row is None:
-        raise HTTPException(404, f"There is no record {value}.")
+        raise HTTPException(404, f"There is no record {record_id}.")
     return row
 
 
 def load_claim(conn: sqlite3.Connection, claim_id: str) -> Claim:
     """Return a claim with its decision, payment and sign-off."""
-    row = find(conn, "claims", "claim_id", claim_id)
-    claim = {
-        **json.loads(row["data"]),
-        "status": row["status"],
-        "failures": row["failures"],
-    }
-    for name, table in [
-        ("decision", "decisions"),
-        ("payment", "payments"),
-        ("sign_off", "sign_offs"),
-    ]:
-        extra = conn.execute(
-            f"SELECT * FROM {table} WHERE claim_id = ?",  # noqa: S608
-            (claim_id,),
-        ).fetchone()
-        claim[name] = dict(extra) if extra else None
-    return Claim.model_validate(claim)
+    row = find(conn, "claims", claim_id)
+    return Claim.model_validate(
+        {
+            **json.loads(row["data"]),
+            "status": row["status"],
+            "failures": row["failures"],
+            "decision": lookup(conn, "decisions", claim_id),
+            "payment": lookup(conn, "payments", claim_id),
+            "sign_off": lookup(conn, "sign_offs", claim_id),
+        }
+    )
 
 
 def now() -> str:
@@ -119,9 +138,14 @@ def pay(conn: sqlite3.Connection, claim_id: str, amount: float) -> None:
     conn.execute("INSERT INTO payments VALUES (?, ?, ?)", (claim_id, amount, now()))
 
 
+def load_customer(conn: sqlite3.Connection, customer_id: str) -> Customer:
+    """Return a customer with their contact details and claim history."""
+    return Customer(**json.loads(find(conn, "customers", customer_id)["data"]))
+
+
 def load_run(conn: sqlite3.Connection, run_id: int) -> Run:
     """Return a run with its to-do list, in order."""
-    run = dict(find(conn, "runs", "run_id", str(run_id)))
+    run = find(conn, "runs", run_id)
     todos = conn.execute(
         "SELECT text, status FROM todos WHERE run_id = ? ORDER BY position", (run_id,)
     ).fetchall()
@@ -177,20 +201,19 @@ def get_claim(claim_id: str, conn: Database) -> Claim:
 @app.get("/api/policies/{policy_id}", operation_id="get_policy")
 def get_policy(policy_id: str, conn: Database) -> Policy:
     """Return one policy."""
-    return Policy(**json.loads(find(conn, "policies", "policy_id", policy_id)["data"]))
+    return Policy(**json.loads(find(conn, "policies", policy_id)["data"]))
 
 
 @app.get("/api/customers/{customer_id}", operation_id="get_customer")
 def get_customer(customer_id: str, conn: Database) -> Customer:
     """Return one customer with their contact details and claim history."""
-    row = find(conn, "customers", "customer_id", customer_id)
-    return Customer(**json.loads(row["data"]))
+    return load_customer(conn, customer_id)
 
 
 @app.get("/api/customers/{customer_id}/claims", operation_id="get_claim_history")
 def get_claim_history(customer_id: str, conn: Database) -> list[PreviousClaim]:
     """Return a customer's earlier claims, without their contact details."""
-    return get_customer(customer_id, conn).previous_claims
+    return load_customer(conn, customer_id).previous_claims
 
 
 @app.get(
@@ -264,7 +287,7 @@ def release_claim(claim_id: str, conn: Database) -> Claim:
 @app.post("/api/claims/{claim_id}/steps", operation_id="record_step")
 def record_step(claim_id: str, step: NewStep, conn: Database) -> Step:
     """Record one step the agent took on a claim."""
-    find(conn, "claims", "claim_id", claim_id)
+    find(conn, "claims", claim_id)
     created_at = now()
     cursor = conn.execute(
         "INSERT INTO steps (claim_id, kind, text, created_at) VALUES (?, ?, ?, ?)",
@@ -281,7 +304,7 @@ def record_step(claim_id: str, step: NewStep, conn: Database) -> Step:
 @app.get("/api/claims/{claim_id}/steps", operation_id="list_steps")
 def list_steps(claim_id: str, conn: Database) -> list[Step]:
     """List the steps the agent took on a claim, oldest first."""
-    find(conn, "claims", "claim_id", claim_id)
+    find(conn, "claims", claim_id)
     rows = conn.execute(
         "SELECT * FROM steps WHERE claim_id = ? ORDER BY step_id", (claim_id,)
     ).fetchall()
@@ -339,9 +362,7 @@ def pay_claim(claim_id: str, payment: NewPayment, conn: Database) -> Claim:
 def sign_off_claim(claim_id: str, sign_off: NewSignOff, conn: Database) -> Claim:
     """Sign off an approval over the limit, which pays its payout."""
     require_status(load_claim(conn, claim_id), "awaiting_sign_off", "signed off")
-    handler = Handler(
-        **json.loads(find(conn, "handlers", "handler_id", sign_off.handler_id)["data"])
-    )
+    handler = Handler(**json.loads(find(conn, "handlers", sign_off.handler_id)["data"]))
     if not handler.can_approve_over_limit:
         raise HTTPException(
             409, f"{handler.name} can't sign off payouts over the limit."
@@ -349,7 +370,7 @@ def sign_off_claim(claim_id: str, sign_off: NewSignOff, conn: Database) -> Claim
     conn.execute(
         "INSERT INTO sign_offs VALUES (?, ?, ?)", (claim_id, handler.handler_id, now())
     )
-    pay(conn, claim_id, find(conn, "decisions", "claim_id", claim_id)["payout"])
+    pay(conn, claim_id, find(conn, "decisions", claim_id)["payout"])
     set_status(conn, claim_id, "decided")
     return load_claim(conn, claim_id)
 
@@ -358,7 +379,7 @@ def sign_off_claim(claim_id: str, sign_off: NewSignOff, conn: Database) -> Claim
 def run_agent(claim_id: str, background: BackgroundTasks, conn: Database) -> Claim:
     """Start the agent on a waiting claim, in the background."""
     require_status(load_claim(conn, claim_id), "waiting", "run")
-    background.add_task(agent.run, claim_id, str(uuid4()))
+    background.add_task(work_claim, claim_id)
     return load_claim(conn, claim_id)
 
 

@@ -1,4 +1,4 @@
-import { formatTime, getJson, type Run } from "./api";
+import { endpoints, formatTime, type Run } from "./api";
 import { Loading, TodoChip } from "./components";
 import { useResource } from "./hooks";
 
@@ -72,11 +72,7 @@ function RunDetails({ run }: Readonly<{ run: Run | null }>) {
 }
 
 export function RunPanel() {
-  const { data: run, error } = useResource<Run | null>(
-    "/api/runs/latest",
-    getJson,
-    2000,
-  );
+  const { data: run, error } = useResource(endpoints.latestRun, 2000);
   return (
     <section className="panel" aria-label="The agent's run">
       <h2>The agent's run</h2>

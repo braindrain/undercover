@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from agent import main, queue, tools
+from agent import agents, api, tools
 from agent.tests.stubs import BrokenModel, approve_and_pay, call, stub
 from backend.main import app
 
@@ -42,7 +42,7 @@ def stand_in(monkeypatch):
     failures: dict[str, int] = {}
     worked: list[str] = []
 
-    def run(claim_id, thread_id, llm=None):
+    def work_claim(claim_id, llm=None):
         worked.append(claim_id)
         client.post(f"/api/claims/{claim_id}/start").raise_for_status()
         try:
@@ -62,13 +62,13 @@ def stand_in(monkeypatch):
             client.post(f"/api/claims/{claim_id}/release")
         return "Declined."
 
-    monkeypatch.setattr(main, "run", run)
+    monkeypatch.setattr(agents, "work_claim", work_claim)
     return failures, worked
 
 
 def run_queue(cap, *replies):
     model = stub(*replies)
-    return list(queue.run_queue(cap, "thread-1", model)), model
+    return list(agents.run_queue(cap, model)), model
 
 
 def test_the_todo_list_is_stored(stand_in):
@@ -237,24 +237,27 @@ def test_the_waiting_claims_are_listed_with_the_cap(stand_in):
     ],
 )
 def test_report(record, line):
-    assert queue.report({"claim_id": "CLM-1001", **record}, None) == line
+    assert tools.report({"claim_id": "CLM-1001", **record}, None) == line
 
 
 def test_report_a_claim_left_for_a_handler():
     record = {"claim_id": "CLM-1001", "status": "left_for_handler", "decision": None}
-    assert queue.report(record, TimeoutError("The model timed out.")) == (
+    assert tools.report(record, TimeoutError("The model timed out.")) == (
         "CLM-1001: failed twice (The model timed out), left for a handler."
     )
 
 
-def test_work_refuses_a_claim_that_is_not_waiting(stand_in):
-    run = queue.Run(run_id=1, cap=5, llm=None)
+def test_work_claim_refuses_a_claim_that_is_not_waiting(stand_in):
     client.post("/api/claims/CLM-1001/start")
-    assert queue.work(run, "CLM-1001") == (
-        "Refused: CLM-1001 is in progress, so it can't be worked."
+    _, model = run_queue(
+        5, work("CLM-1001"), work("CLM-9999"), AIMessage(content="Done.")
     )
-    assert queue.work(run, "CLM-9999") == "Refused: There is no record CLM-9999."
-    assert run.worked == set()
+    replies = [m.content for m in model.prompts[2] if isinstance(m, ToolMessage)]
+    assert replies == [
+        "Refused: CLM-1001 is in progress, so it can't be worked.",
+        "Refused: There is no record CLM-9999.",
+    ]
+    assert "CLM-1001" not in stand_in[1]
 
 
 def test_both_agents_on_one_claim():
@@ -267,7 +270,7 @@ def test_both_agents_on_one_claim():
         todos(("CLM-1001", "done")),
         AIMessage(content="Approved and paid CLM-1001."),
     )
-    lines = list(queue.run_queue(1, "thread-1", model))
+    lines = list(agents.run_queue(1, model))
     assert lines == [
         "CLM-1001: approved, $420.00, paid.",
         "Approved and paid CLM-1001.",
@@ -289,7 +292,7 @@ def test_both_agents_on_one_claim():
 
 
 def test_a_queue_agent_whose_model_fails_still_finishes_the_run():
-    lines = list(queue.run_queue(5, "thread-1", BrokenModel(messages=iter([]))))
+    lines = list(agents.run_queue(5, BrokenModel(messages=iter([]))))
     assert lines == ["The run stopped: The model is unavailable."]
     run = latest_run()
     assert run["status"] == "finished"
@@ -298,8 +301,10 @@ def test_a_queue_agent_whose_model_fails_still_finishes_the_run():
 
 
 def test_a_queue_agent_that_never_finishes_stops_at_its_limit(stand_in):
-    model = stub(*(call("list_waiting_claims") for _ in range(queue.call_limit(1) + 1)))
-    lines = list(queue.run_queue(1, "thread-1", model))
+    model = stub(
+        *(call("list_waiting_claims") for _ in range(agents.queue_call_limit(1) + 1))
+    )
+    lines = list(agents.run_queue(1, model))
     assert lines[-1].startswith("The run stopped: Model call limits exceeded")
     assert latest_run()["status"] == "finished"
 
@@ -308,12 +313,12 @@ def test_a_queue_agent_that_never_finishes_stops_at_its_limit(stand_in):
 def command(monkeypatch):
     runs = []
 
-    def run_queue(cap, thread_id):
+    def run_queue(cap):
         runs.append(cap)
         yield "CLM-1001: declined."
         yield "Worked one claim."
 
-    monkeypatch.setattr(queue, "run_queue", run_queue)
+    monkeypatch.setattr(agents, "run_queue", run_queue)
 
     def run(*args):
         monkeypatch.setattr(sys, "argv", ["agent", *args])
@@ -337,7 +342,7 @@ def test_command_with_a_cap(command):
 
 def test_command_with_nothing_waiting(command, monkeypatch, capsys):
     run, runs = command
-    monkeypatch.setattr(tools, "waiting_claims", list)
+    monkeypatch.setattr(api, "waiting_claims", list)
     run()
     assert runs == []
     assert capsys.readouterr().out == "No claims are waiting.\n"
@@ -345,7 +350,7 @@ def test_command_with_nothing_waiting(command, monkeypatch, capsys):
 
 def test_command_runs_one_claim(command, monkeypatch, capsys):
     run, runs = command
-    monkeypatch.setattr(main, "run", lambda claim_id, thread_id: f"{claim_id} done.")
+    monkeypatch.setattr(agents, "work_claim", lambda claim_id: f"{claim_id} done.")
     run("CLM-1001")
     assert runs == []
     assert capsys.readouterr().out == "CLM-1001 done.\n"

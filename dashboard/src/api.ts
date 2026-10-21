@@ -162,6 +162,41 @@ export function formatLabel(value: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+export type DocumentName = "policy_wording" | "claims_manual";
+
+export interface Endpoint<T> {
+  path: string;
+  read: (response: Response) => Promise<T>;
+}
+
+const readJson = (response: Response): Promise<unknown> => response.json();
+const readText = (response: Response): Promise<string> => response.text();
+
+function json<T>(path: string): Endpoint<T> {
+  return { path, read: readJson as (response: Response) => Promise<T> };
+}
+
+function text(path: string): Endpoint<string> {
+  return { path, read: readText };
+}
+
+export const endpoints = {
+  claims: json<ClaimSummary[]>("/api/claims"),
+  claim: (claimId: string) => json<Claim>(`/api/claims/${claimId}`),
+  steps: (claimId: string) => json<Step[]>(`/api/claims/${claimId}/steps`),
+  policy: (policyId: string) => json<Policy>(`/api/policies/${policyId}`),
+  customer: (customerId: string) =>
+    json<Customer>(`/api/customers/${customerId}`),
+  handlers: json<Handler[]>("/api/handlers"),
+  latestRun: json<Run | null>("/api/runs/latest"),
+  instructions: (name: "queue" | "claim") => text(`/api/instructions/${name}`),
+  document: (name: DocumentName) => text(`/api/documents/${name}`),
+};
+
+export function errorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
 async function check(response: Response): Promise<Response> {
   if (!response.ok) {
     const body = (await response.json()) as { detail: unknown };
@@ -172,17 +207,11 @@ async function check(response: Response): Promise<Response> {
   return response;
 }
 
-export async function getJson<T>(path: string): Promise<T> {
-  const response = await check(await fetch(path));
-  return (await response.json()) as T;
+export async function load<T>(endpoint: Endpoint<T>): Promise<T> {
+  return endpoint.read(await check(await fetch(endpoint.path)));
 }
 
-export async function getText(path: string): Promise<string> {
-  const response = await check(await fetch(path));
-  return response.text();
-}
-
-export async function post(path: string, body?: object): Promise<void> {
+async function post(path: string, body?: object): Promise<void> {
   await check(
     await fetch(path, {
       method: "POST",
@@ -190,4 +219,12 @@ export async function post(path: string, body?: object): Promise<void> {
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
   );
+}
+
+export function runAgent(claimId: string): Promise<void> {
+  return post(`/api/claims/${claimId}/run`);
+}
+
+export function signOff(claimId: string, handlerId: string): Promise<void> {
+  return post(`/api/claims/${claimId}/sign-off`, { handler_id: handlerId });
 }

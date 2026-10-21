@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { errorMessage, load, type Endpoint } from "./api";
 
 export type Route =
   | { page: "queue" }
@@ -32,10 +33,10 @@ export interface Resource<T> {
 }
 
 export function useResource<T>(
-  path: string,
-  load: (path: string) => Promise<T>,
+  endpoint: Endpoint<T>,
   refreshMs: number | null,
 ): Resource<T> {
+  const { path, read } = endpoint;
   const [data, setData] = useState<T>();
   const [error, setError] = useState<string>();
   const [version, setVersion] = useState(0);
@@ -43,15 +44,14 @@ export function useResource<T>(
   useEffect(() => {
     let active = true;
     const fetchNow = () => {
-      load(path).then(
+      load({ path, read }).then(
         (value) => {
           if (!active) return;
           setData(value);
           setError(undefined);
         },
         (reason: unknown) => {
-          if (active)
-            setError(reason instanceof Error ? reason.message : String(reason));
+          if (active) setError(errorMessage(reason));
         },
       );
     };
@@ -62,7 +62,7 @@ export function useResource<T>(
       active = false;
       clearInterval(timer);
     };
-  }, [path, load, refreshMs, version]);
+  }, [path, read, refreshMs, version]);
 
   const reload = useCallback(() => {
     setVersion((current) => current + 1);

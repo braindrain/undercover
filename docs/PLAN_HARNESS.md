@@ -93,6 +93,8 @@ New tables: `runs` (id, cap, status `running` or `finished`, summary, started an
 
 ### The agent's code
 
+This layout failed review (`docs/HUMAN_REVIEW_HARNESS.md`). The agent is now `api.py`, `harness.py`, `tools.py` and `agents.py`, as `docs/STATUS.md` describes, and the instructions are written as goals.
+
 - `agent/tools.py`: the backend client and the claim agent's seven tools.
 - `agent/middleware.py`: step recording, and the retry and limit middleware the two agents share.
 - `agent/main.py`: the model and the claim agent's `run(claim_id, thread_id)`.

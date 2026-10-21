@@ -1,12 +1,12 @@
-import { getText } from "./api";
+import { endpoints } from "./api";
 import { Loading } from "./components";
 import { useResource } from "./hooks";
 
 export function InstructionsPage() {
-  const queue = useResource("/api/instructions/queue", getText, null);
-  const claim = useResource("/api/instructions/claim", getText, null);
-  const wording = useResource("/api/documents/policy_wording", getText, null);
-  const manual = useResource("/api/documents/claims_manual", getText, null);
+  const queue = useResource(endpoints.instructions("queue"), null);
+  const claim = useResource(endpoints.instructions("claim"), null);
+  const wording = useResource(endpoints.document("policy_wording"), null);
+  const manual = useResource(endpoints.document("claims_manual"), null);
   if (queue.data === undefined || claim.data === undefined)
     return <Loading error={queue.error ?? claim.error} />;
 
