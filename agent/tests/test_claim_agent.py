@@ -1,7 +1,5 @@
 import itertools
 import re
-import runpy
-import sys
 from pathlib import Path
 
 import httpx
@@ -214,24 +212,3 @@ def test_model_name(monkeypatch):
     assert default.max_retries == 0
     monkeypatch.setenv("MODEL_NAME", "openrouter/free")
     assert main.model().model_name == "openrouter/free"
-
-
-def test_waiting_claims():
-    assert len(main.waiting_claims()) == 25
-    client.post("/api/claims/CLM-1001/start")
-    assert "CLM-1001" not in main.waiting_claims()
-
-
-def test_run_queue_carries_on_after_a_failure():
-    client.post("/api/claims/CLM-1001/start")
-    model = stub(decision("CLM-1002", "decline", 0), AIMessage(content="Declined."))
-    results = list(main.run_queue(["CLM-1001", "CLM-1002"], model))
-    assert results[0][1].startswith("Failed: Client error '409 Conflict'")
-    assert results[1] == ("CLM-1002", "Declined.")
-
-
-def test_command_runs_one_claim(monkeypatch, capsys):
-    monkeypatch.setattr(sys, "argv", ["agent", "CLM-1001"])
-    monkeypatch.setattr(main, "run", lambda claim_id, thread_id: f"{claim_id} done.")
-    runpy.run_module("agent", run_name="__main__")
-    assert capsys.readouterr().out == "CLM-1001 done.\n"

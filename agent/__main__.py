@@ -1,18 +1,24 @@
-"""Run the UnderCover Agent on one claim, or on every waiting claim in the queue.
+"""Run the UnderCover Agent.
 
-uv run -m agent CLM-1001
-uv run -m agent
+uv run -m agent            works every waiting claim in the queue
+uv run -m agent --cap 5    works at most five claims and leaves the rest waiting
+uv run -m agent CLM-1001   works one claim
 """
 
-import sys
+import argparse
 from uuid import uuid4
 
-from agent.main import run, run_queue, waiting_claims
+from agent import main, queue, tools
 
-if len(sys.argv) > 1:
-    print(run(sys.argv[1], str(uuid4())))
+parser = argparse.ArgumentParser(prog="agent", description="Run the UnderCover Agent.")
+parser.add_argument("claim_id", nargs="?", help="work this one claim")
+parser.add_argument("--cap", type=int, help="the most claims to work in the run")
+args = parser.parse_args()
+
+if args.claim_id:
+    print(main.run(args.claim_id, str(uuid4())))
 else:
-    claim_ids = waiting_claims()
-    print(f"{len(claim_ids)} claims waiting")
-    for claim_id, reply in run_queue(claim_ids):
-        print(f"{claim_id}: {reply}")
+    cap = args.cap or len(tools.waiting_claims())
+    lines = queue.run_queue(cap, str(uuid4())) if cap else ["No claims are waiting."]
+    for line in lines:
+        print(line, flush=True)

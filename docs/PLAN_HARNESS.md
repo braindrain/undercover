@@ -168,19 +168,19 @@ Build the agent that runs the queue: its tools, its to-do list, the subagent, th
 
 Success criteria:
 
-- [ ] The to-do list is stored: a stub-model test calls `write_todos` twice, and `get_latest_run` shows the second list, in order, with its statuses
-- [ ] The cap: a stub-model run capped at 2 works CLM-1001 and CLM-1002, and `work_claim` on CLM-1003 is refused with the cap in the reason; CLM-1003 and the other 22 claims stay `waiting`
-- [ ] A failed claim doesn't stop the run: with a claim agent that fails on CLM-1001, the run goes on to decide CLM-1002, and finishes with a summary
-- [ ] A failed claim is tried again: the claim agent fails on CLM-1001 once; the report says it's back in the queue; the queue agent works it again, which doesn't count against a cap of 2, and it ends `decided` with 1 failure
-- [ ] A claim that fails twice is left for a handler: it ends `left_for_handler`, the report says so, and the missed-claim check doesn't ask for it again
-- [ ] The check for missed claims: a queue agent that tries to finish with a waiting claim still within its cap is sent back with a message naming that claim, works it, then finishes; one that has reached its cap finishes at once
-- [ ] The reports: tests check the line for an approval paid, an approval waiting for sign-off, a decline, a referral, a failure back in the queue, a claim left for a handler and a refusal
-- [ ] One stub-model test runs both agents for real on CLM-1001: the claim's steps are recorded on the claim, the queue agent's conversation holds only the one-line report from it, and the run finishes with its summary
-- [ ] A queue agent whose model always fails still finishes the run, with the error as its summary, and no claim is left `in_progress`
-- [ ] Tests for the command: no arguments caps the run at the number of waiting claims, `--cap 5` passes 5, and a claim id runs that claim alone
-- [ ] `backend/instructions/queue.md` names no claim, customer or policy id (the same test as phase 2)
-- [ ] Live check, capped at five claims, a few cents at most: after `uv run -m backend.seed`, with `npm run dev:backend` running, `uv run -m agent --cap 5` prints five reports and a summary; `curl -s localhost:8000/api/runs/latest` shows the run finished with every item done or left for a handler; 20 claims are still `waiting`; then reset with `uv run -m backend.seed`
-- [ ] `npm run check:python` passes with coverage at or above 80%
+- [x] The to-do list is stored: a stub-model test calls `write_todos` twice, and `get_latest_run` shows the second list, in order, with its statuses
+- [x] The cap: a stub-model run capped at 2 works CLM-1001 and CLM-1002, and `work_claim` on CLM-1003 is refused with the cap in the reason; CLM-1003 and the other 22 claims stay `waiting`
+- [x] A failed claim doesn't stop the run: with a claim agent that fails on CLM-1001, the run goes on to decide CLM-1002, and finishes with a summary
+- [x] A failed claim is tried again: the claim agent fails on CLM-1001 once; the report says it's back in the queue; the queue agent works it again, which doesn't count against a cap of 2, and it ends `decided` with 1 failure
+- [x] A claim that fails twice is left for a handler: it ends `left_for_handler`, the report says so, and the missed-claim check doesn't ask for it again
+- [x] The check for missed claims: a queue agent that tries to finish with a waiting claim still within its cap is sent back with a message naming that claim, works it, then finishes; one that has reached its cap finishes at once
+- [x] The reports: tests check the line for an approval paid, an approval waiting for sign-off, a decline, a referral, a failure back in the queue, a claim left for a handler and a refusal
+- [x] One stub-model test runs both agents for real on CLM-1001: the claim's steps are recorded on the claim, the queue agent's conversation holds only the one-line report from it, and the run finishes with its summary
+- [x] A queue agent whose model always fails still finishes the run, with the error as its summary, and no claim is left `in_progress`
+- [x] Tests for the command: no arguments caps the run at the number of waiting claims, `--cap 5` passes 5, and a claim id runs that claim alone
+- [x] `backend/instructions/queue.md` names no claim, customer or policy id (the same test as phase 2)
+- [x] Live check, capped at five claims, a few cents at most: after `uv run -m backend.seed`, with `npm run dev:backend` running, `uv run -m agent --cap 5` prints five reports and a summary; `curl -s localhost:8000/api/runs/latest` shows the run finished with every item done or left for a handler; 20 claims are still `waiting`; then reset with `uv run -m backend.seed`
+- [x] `npm run check:python` passes with coverage at or above 80%
 
 ## Phase 4: The dashboard
 

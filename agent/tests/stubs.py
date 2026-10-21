@@ -1,5 +1,7 @@
 """Stub models and scripted replies, so that tests never call a real model."""
 
+from uuid import uuid4
+
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 
@@ -37,7 +39,9 @@ class FlakyModel(StubModel):
 
 
 def call(name, **args):
-    return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": name}])
+    return AIMessage(
+        content="", tool_calls=[{"name": name, "args": args, "id": str(uuid4())}]
+    )
 
 
 def stub(*replies):
