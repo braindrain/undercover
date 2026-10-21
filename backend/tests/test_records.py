@@ -136,7 +136,7 @@ def test_an_unknown_document_is_refused():
 
 @pytest.mark.parametrize(
     ("name", "heading"),
-    [("queue", "# Running the queue"), ("claim", "# The UnderCover Agent")],
+    [("queue", "# Running the queue"), ("claim", "# Working a claim")],
 )
 def test_get_instructions(name, heading):
     response = client.get(f"/api/instructions/{name}")

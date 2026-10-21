@@ -145,17 +145,17 @@ Give the claim agent its lookup tools, its middleware, its new instructions and 
 
 Success criteria:
 
-- [ ] A stub-model test runs CLM-1001 through `get_claim`, `get_policy`, `get_claim_history`, `list_sections`, `read_section` on the wording's section 3, `record_decision` and `pay_claim`; the claim ends `decided` and paid, and its steps are each tool call and result in order, with the read recorded as a `read` step "Policy wording: 3. Trip Delay" followed by the section's text
-- [ ] A test checks the system prompt is exactly the claim instructions from the API, with no policy wording in it
-- [ ] A stub-model test whose model fails once, then succeeds, still decides the claim, and records each step once
-- [ ] A stub-model test whose model always fails leaves the claim `waiting` with 1 failure and an error step; a second such run leaves it `left_for_handler`
-- [ ] A stub-model test whose tool call can't reach the backend once (a stubbed `httpx` error) retries it and carries on
-- [ ] A stub-model test that never decides stops at the model call limit, and the claim is released with a failure
-- [ ] The pilot's tests still pass where their behavior hasn't changed: approve and pay, the refused payment over the limit, a decline, `run_agent`, and no file in `agent/` mentions `data/`
-- [ ] `main.model()` is `deepseek/deepseek-v4.1-flash` by default and `openrouter/free` when `MODEL_NAME` is set
-- [ ] `backend/instructions/claim.md` names no claim, customer or policy id (a test checks there's no `CLM-`, `CUS-` or `POL-` in it)
-- [ ] Live check, one claim, a few cents at most: after `uv run -m backend.seed`, with `npm run dev:backend` running, `uv run -m agent CLM-1001` records a decision with reasons and a section, and `curl` shows its steps with at least one `read` step; then reset with `uv run -m backend.seed`
-- [ ] `npm run check:python` passes with coverage at or above 80%
+- [x] A stub-model test runs CLM-1001 through `get_claim`, `get_policy`, `get_claim_history`, `list_sections`, `read_section` on the wording's section 3, `record_decision` and `pay_claim`; the claim ends `decided` and paid, and its steps are each tool call and result in order, with the read recorded as a `read` step "Policy wording: 3. Trip Delay" followed by the section's text
+- [x] A test checks the system prompt is exactly the claim instructions from the API, with no policy wording in it
+- [x] A stub-model test whose model fails once, then succeeds, still decides the claim, and records each step once
+- [x] A stub-model test whose model always fails leaves the claim `waiting` with 1 failure and an error step; a second such run leaves it `left_for_handler`
+- [x] A stub-model test whose tool call can't reach the backend once (a stubbed `httpx` error) retries it and carries on
+- [x] A stub-model test that never decides stops at the model call limit, and the claim is released with a failure
+- [x] The pilot's tests still pass where their behavior hasn't changed: approve and pay, the refused payment over the limit, a decline, `run_agent`, and no file in `agent/` mentions `data/`
+- [x] `main.model()` is `deepseek/deepseek-v4.1-flash` by default and `openrouter/free` when `MODEL_NAME` is set
+- [x] `backend/instructions/claim.md` names no claim, customer or policy id (a test checks there's no `CLM-`, `CUS-` or `POL-` in it)
+- [x] Live check, one claim, a few cents at most: after `uv run -m backend.seed`, with `npm run dev:backend` running, `uv run -m agent CLM-1001` records a decision with reasons and a section, and `curl` shows its steps with at least one `read` step; then reset with `uv run -m backend.seed`
+- [x] `npm run check:python` passes with coverage at or above 80%
 
 ## Phase 3: The queue agent
 
