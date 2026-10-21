@@ -126,8 +126,8 @@ def test_a_failed_run_gives_the_claim_back():
 def test_system_prompt_is_the_instructions_then_the_wording():
     model = stub(AIMessage(content="Done."))
     main.run("CLM-1001", "thread-1", model)
-    instructions = client.get("/api/instructions").text
-    wording = client.get("/api/policy-wording").text
+    instructions = client.get("/api/instructions/claim").text
+    wording = client.get("/api/documents/policy_wording").text
     assert model.prompts[0][0].content == f"{instructions}\n\n{wording}"
 
 

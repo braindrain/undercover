@@ -33,8 +33,8 @@ it("shows the queue by default", async () => {
 
 it("follows the hash to the instructions", async () => {
   stubFetch({
-    "/api/instructions": "# The UnderCover Agent",
-    "/api/policy-wording": "# Policy Wording",
+    "/api/instructions/claim": "# The UnderCover Agent",
+    "/api/documents/policy_wording": "# Policy Wording",
   });
   window.location.hash = "#/instructions";
   render(<App />);

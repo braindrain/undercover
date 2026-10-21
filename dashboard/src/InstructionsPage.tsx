@@ -3,8 +3,8 @@ import { Loading } from "./components";
 import { useResource } from "./hooks";
 
 export function InstructionsPage() {
-  const instructions = useResource("/api/instructions", getText, null);
-  const wording = useResource("/api/policy-wording", getText, null);
+  const instructions = useResource("/api/instructions/claim", getText, null);
+  const wording = useResource("/api/documents/policy_wording", getText, null);
   if (instructions.data === undefined)
     return <Loading error={instructions.error} />;
 

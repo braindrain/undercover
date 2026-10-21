@@ -10,8 +10,8 @@ afterEach(() => {
 
 it("shows the instructions and the policy wording, read only", async () => {
   stubFetch({
-    "/api/instructions": "# The UnderCover Agent\n\nDecide claims.",
-    "/api/policy-wording": "# Policy Wording",
+    "/api/instructions/claim": "# The UnderCover Agent\n\nDecide claims.",
+    "/api/documents/policy_wording": "# Policy Wording",
   });
   render(<InstructionsPage />);
   expect(await screen.findByText(/Decide claims\./)).toBeDefined();

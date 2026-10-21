@@ -2,9 +2,11 @@
 
 The claims pilot from `docs/PLAN.md` is built: all six phases.
 
+The agent's harness from `docs/PLAN_HARNESS.md` is in progress: phase 1 of 5 is built (the backend's records and rules). After pulling this build, reset the database with `uv run -m backend.seed`, since the tables have changed.
+
 ## What's built
 
-- `backend/`: FastAPI on SQLite. The database is created from `data/` on first use, at `DATABASE_PATH` or by default `backend/undercover.db`, and never reads `data/evals/`. It serves the claims queue, each claim, policies, customers, a customer's claim history, the policy wording, the handlers and the agent's instructions (`backend/instructions.md`). Claims move from `waiting` to `in_progress` to `decided`, or to `awaiting_sign_off` for an approval over $1,000.00. The backend enforces the rules: a payment must match an approval, is made once, and over the limit is refused until a handler signs off, which pays it.
+- `backend/`: FastAPI on SQLite. The database is created from `data/` on first use, at `DATABASE_PATH` or by default `backend/undercover.db`, and never reads `data/evals/`. It serves the claims queue, each claim, policies, customers, a customer's claim history, the handlers, the policy wording and the claims manual (in full, or as a list of numbered sections and one section at a time), the agent's instructions for running the queue and for working a claim (`backend/instructions/`), and runs of the agent with their to-do lists. Claims move from `waiting` to `in_progress` to `decided`, or to `awaiting_sign_off` for an approval over $1,000.00. A release counts a failure: the first returns the claim to `waiting`, the second leaves it `left_for_handler`. The backend enforces the rules: a payment must match an approval, is made once, and over the limit is refused until a handler signs off, which pays it.
 - `agent/`: the UnderCover Agent on `openai/gpt-6-luna` with low reasoning effort, or `MODEL_NAME`. `run(claim_id, thread_id)` takes its instructions and the policy wording from the backend as its system prompt, works the claim with five tools over the API (`get_claim`, `get_policy`, `get_claim_history`, `record_decision`, `pay_claim`) and records each step. A run that ends without a decision returns the claim to waiting.
 - `dashboard/`: the claims desk in the UnderCover brand, light and dark.
   - The queue (`#/`), with counts by state, refreshing every 5 seconds.

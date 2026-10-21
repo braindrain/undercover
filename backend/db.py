@@ -18,6 +18,7 @@ SCHEMA = """
 CREATE TABLE claims (
     claim_id TEXT PRIMARY KEY,
     status TEXT NOT NULL,
+    failures INTEGER NOT NULL DEFAULT 0,
     data TEXT NOT NULL
 );
 CREATE TABLE policies (policy_id TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -47,6 +48,21 @@ CREATE TABLE sign_offs (
     claim_id TEXT PRIMARY KEY,
     handler_id TEXT NOT NULL,
     signed_off_at TEXT NOT NULL
+);
+CREATE TABLE runs (
+    run_id INTEGER PRIMARY KEY,
+    cap INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    summary TEXT,
+    started_at TEXT NOT NULL,
+    finished_at TEXT
+);
+CREATE TABLE todos (
+    run_id INTEGER NOT NULL,
+    position INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    status TEXT NOT NULL,
+    PRIMARY KEY (run_id, position)
 );
 """
 
@@ -78,7 +94,7 @@ def seed(conn: sqlite3.Connection) -> None:
     for claim in json.loads(read_data("claims.json")):
         claim.pop("status")
         conn.execute(
-            "INSERT INTO claims VALUES (?, 'waiting', ?)",
+            "INSERT INTO claims (claim_id, status, data) VALUES (?, 'waiting', ?)",
             (claim["claim_id"], json.dumps(claim)),
         )
     for table, key in SEED_TABLES.items():

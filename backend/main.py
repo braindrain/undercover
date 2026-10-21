@@ -6,33 +6,41 @@ from collections.abc import Iterator
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
 
 from agent import main as agent
-from backend import db
+from backend import db, documents
+from backend.documents import DocumentName
 from backend.models import (
     Claim,
     ClaimSummary,
+    Contents,
     Customer,
     Handler,
     NewDecision,
     NewPayment,
+    NewRun,
     NewSignOff,
     NewStep,
     Policy,
     PreviousClaim,
+    Run,
+    RunSummary,
     Status,
     Step,
+    Todo,
+    TodoList,
 )
 
-INSTRUCTIONS = Path(__file__).parent / "instructions.md"
+INSTRUCTIONS = Path(__file__).parent / "instructions"
 APPROVAL_LIMIT: float = json.loads(db.read_data("company.json"))[
     "payout_approval_limit"
 ]
+MAX_FAILURES = 2
 
 app = FastAPI(title="UnderCover")
 
@@ -64,7 +72,11 @@ def find(conn: sqlite3.Connection, table: str, key: str, value: str) -> sqlite3.
 def load_claim(conn: sqlite3.Connection, claim_id: str) -> Claim:
     """Return a claim with its decision, payment and sign-off."""
     row = find(conn, "claims", "claim_id", claim_id)
-    claim = {**json.loads(row["data"]), "status": row["status"]}
+    claim = {
+        **json.loads(row["data"]),
+        "status": row["status"],
+        "failures": row["failures"],
+    }
     for name, table in [
         ("decision", "decisions"),
         ("payment", "payments"),
@@ -105,6 +117,23 @@ def set_status(conn: sqlite3.Connection, claim_id: str, status: Status) -> None:
 def pay(conn: sqlite3.Connection, claim_id: str, amount: float) -> None:
     """Record a payment."""
     conn.execute("INSERT INTO payments VALUES (?, ?, ?)", (claim_id, amount, now()))
+
+
+def load_run(conn: sqlite3.Connection, run_id: int) -> Run:
+    """Return a run with its to-do list, in order."""
+    run = dict(find(conn, "runs", "run_id", str(run_id)))
+    todos = conn.execute(
+        "SELECT text, status FROM todos WHERE run_id = ? ORDER BY position", (run_id,)
+    ).fetchall()
+    return Run(**run, todos=[Todo.model_validate(dict(todo)) for todo in todos])
+
+
+def running_run(conn: sqlite3.Connection, run_id: int) -> Run:
+    """Return a run that is still running, or refuse."""
+    run = load_run(conn, run_id)
+    if run.status != "running":
+        raise HTTPException(409, f"Run {run_id} has finished.")
+    return run
 
 
 @app.get("/api/health", operation_id="health")
@@ -165,23 +194,42 @@ def get_claim_history(customer_id: str, conn: Database) -> list[PreviousClaim]:
 
 
 @app.get(
-    "/api/policy-wording",
-    operation_id="get_policy_wording",
+    "/api/documents/{document}",
+    operation_id="get_document",
     response_class=MarkdownResponse,
 )
-def get_policy_wording() -> str:
-    """Return the policy wording as Markdown."""
-    return db.read_data("policy_wording.md")
+def get_document(document: DocumentName) -> str:
+    """Return the policy wording or the claims manual in full as Markdown."""
+    return documents.read(document)
+
+
+@app.get("/api/documents/{document}/sections", operation_id="list_sections")
+def list_sections(document: DocumentName) -> Contents:
+    """Return a document's title, its opening lines and its numbered sections."""
+    return documents.contents(document)
 
 
 @app.get(
-    "/api/instructions",
+    "/api/documents/{document}/sections/{number}",
+    operation_id="read_section",
+    response_class=MarkdownResponse,
+)
+def read_section(document: DocumentName, number: int) -> str:
+    """Return one numbered section of a document as Markdown, from its heading."""
+    found = documents.sections(document)
+    if number not in found:
+        raise HTTPException(404, f"There is no section {number}.")
+    return found[number]
+
+
+@app.get(
+    "/api/instructions/{name}",
     operation_id="get_instructions",
     response_class=MarkdownResponse,
 )
-def get_instructions() -> str:
-    """Return the agent's instructions as Markdown."""
-    return INSTRUCTIONS.read_text(encoding="utf-8")
+def get_instructions(name: Literal["queue", "claim"]) -> str:
+    """Return the agent's instructions for running the queue or working a claim."""
+    return (INSTRUCTIONS / f"{name}.md").read_text(encoding="utf-8")
 
 
 @app.get("/api/handlers", operation_id="list_handlers")
@@ -201,9 +249,15 @@ def start_claim(claim_id: str, conn: Database) -> Claim:
 
 @app.post("/api/claims/{claim_id}/release", operation_id="release_claim")
 def release_claim(claim_id: str, conn: Database) -> Claim:
-    """Return a claim in progress to waiting, leaving any other claim as it is."""
-    if load_claim(conn, claim_id).status == "in_progress":
-        set_status(conn, claim_id, "waiting")
+    """Count a failure on a claim in progress and return it, leaving others as is."""
+    claim = load_claim(conn, claim_id)
+    if claim.status == "in_progress":
+        failures = claim.failures + 1
+        status = "left_for_handler" if failures >= MAX_FAILURES else "waiting"
+        conn.execute(
+            "UPDATE claims SET status = ?, failures = ? WHERE claim_id = ?",
+            (status, failures, claim_id),
+        )
     return load_claim(conn, claim_id)
 
 
@@ -306,3 +360,47 @@ def run_agent(claim_id: str, background: BackgroundTasks, conn: Database) -> Cla
     require_status(load_claim(conn, claim_id), "waiting", "run")
     background.add_task(agent.run, claim_id, str(uuid4()))
     return load_claim(conn, claim_id)
+
+
+@app.post("/api/runs", operation_id="start_run")
+def start_run(new_run: NewRun, conn: Database) -> Run:
+    """Start a run of the agent over the queue, capped at a number of claims."""
+    cursor = conn.execute(
+        "INSERT INTO runs (cap, status, started_at) VALUES (?, 'running', ?)",
+        (new_run.cap, now()),
+    )
+    return load_run(conn, cursor.lastrowid or 0)
+
+
+@app.get("/api/runs/latest", operation_id="get_latest_run")
+def get_latest_run(conn: Database) -> Run | None:
+    """Return the latest run with its to-do list, or null before the first run."""
+    row = conn.execute("SELECT MAX(run_id) AS run_id FROM runs").fetchone()
+    return None if row["run_id"] is None else load_run(conn, row["run_id"])
+
+
+@app.put("/api/runs/{run_id}/todos", operation_id="set_todos")
+def set_todos(run_id: int, todo_list: TodoList, conn: Database) -> Run:
+    """Replace a running run's to-do list."""
+    running_run(conn, run_id)
+    conn.execute("DELETE FROM todos WHERE run_id = ?", (run_id,))
+    conn.executemany(
+        "INSERT INTO todos VALUES (?, ?, ?, ?)",
+        [
+            (run_id, position, todo.text, todo.status)
+            for position, todo in enumerate(todo_list.todos)
+        ],
+    )
+    return load_run(conn, run_id)
+
+
+@app.post("/api/runs/{run_id}/finish", operation_id="finish_run")
+def finish_run(run_id: int, run_summary: RunSummary, conn: Database) -> Run:
+    """Finish a running run with its summary for the handlers."""
+    running_run(conn, run_id)
+    conn.execute(
+        "UPDATE runs SET status = 'finished', summary = ?, finished_at = ? "
+        "WHERE run_id = ?",
+        (run_summary.summary, now(), run_id),
+    )
+    return load_run(conn, run_id)

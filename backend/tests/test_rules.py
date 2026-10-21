@@ -53,15 +53,42 @@ def test_start_claim():
     )
 
 
-def test_release_claim():
+def release(claim_id):
+    return client.post(f"/api/claims/{claim_id}/release")
+
+
+def test_release_counts_a_failure_and_returns_the_claim():
     start("CLM-1001")
-    assert client.post("/api/claims/CLM-1001/release").json()["status"] == "waiting"
+    claim = release("CLM-1001").json()
+    assert claim["status"] == "waiting"
+    assert claim["failures"] == 1
+
+
+def test_a_second_failure_leaves_the_claim_for_a_handler():
+    start("CLM-1001")
+    release("CLM-1001")
+    start("CLM-1001")
+    claim = release("CLM-1001").json()
+    assert claim["status"] == "left_for_handler"
+    assert claim["failures"] == 2
+    assert refusal(start("CLM-1001")) == (
+        "CLM-1001 is left for handler, so it can't be started."
+    )
+    assert release("CLM-1001").json()["failures"] == 2
 
 
 def test_release_leaves_a_decided_claim():
     start("CLM-1001")
     decide("CLM-1001", "decline", 0)
-    assert client.post("/api/claims/CLM-1001/release").json()["status"] == "decided"
+    claim = release("CLM-1001").json()
+    assert claim["status"] == "decided"
+    assert claim["failures"] == 0
+
+
+def test_release_leaves_a_waiting_claim():
+    claim = release("CLM-1001").json()
+    assert claim["status"] == "waiting"
+    assert claim["failures"] == 0
 
 
 def test_steps():

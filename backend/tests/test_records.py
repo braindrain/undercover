@@ -39,6 +39,7 @@ def test_get_claim():
     assert claim["policy_id"] == "POL-2001"
     assert len(claim["documents"]) == 4
     assert claim["status"] == "waiting"
+    assert claim["failures"] == 0
     assert claim["decision"] is None
     assert claim["payment"] is None
     assert claim["sign_off"] is None
@@ -77,14 +78,74 @@ def test_unknown_record(path):
     assert response.json()["detail"] == f"There is no record {path.split('/')[3]}."
 
 
-def test_get_policy_wording():
-    response = client.get("/api/policy-wording")
+@pytest.mark.parametrize(
+    ("document", "title"),
+    [
+        ("policy_wording", "# UnderCover Travel Insurance: Policy Wording"),
+        ("claims_manual", "# UnderCover Claims Handling Manual"),
+    ],
+)
+def test_get_document(document, title):
+    response = client.get(f"/api/documents/{document}")
     assert response.headers["content-type"].startswith("text/markdown")
-    assert response.text.startswith("# UnderCover Travel Insurance: Policy Wording")
+    assert response.text.startswith(title)
 
 
-def test_get_instructions():
-    assert client.get("/api/instructions").text.startswith("# The UnderCover Agent")
+def test_list_sections_of_the_wording():
+    contents = client.get("/api/documents/policy_wording/sections").json()
+    assert contents["title"] == "UnderCover Travel Insurance: Policy Wording"
+    assert "Version 2026.1" in contents["opening"]
+    assert [section["number"] for section in contents["sections"]] == list(range(1, 13))
+    assert contents["sections"][2] == {"number": 3, "title": "Trip Delay"}
+
+
+def test_list_sections_of_the_manual():
+    contents = client.get("/api/documents/claims_manual/sections").json()
+    assert contents["title"] == "UnderCover Claims Handling Manual"
+    assert "Version 2026.2" in contents["opening"]
+    assert [section["number"] for section in contents["sections"]] == list(range(1, 15))
+    assert contents["sections"][9] == {"number": 10, "title": "Meals without receipts"}
+
+
+def test_read_section():
+    response = client.get("/api/documents/claims_manual/sections/9")
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert response.text.startswith("## 9. Repeat claims\n")
+    assert "third claim within any 12 month period" in response.text
+    assert "## 10." not in response.text
+    assert "Meals without receipts" not in response.text
+
+
+def test_read_the_last_section():
+    text = client.get("/api/documents/claims_manual/sections/14").text
+    assert text.startswith("## 14. Records")
+    assert text.endswith("treated as not yet made.")
+
+
+def test_read_an_unknown_section():
+    response = client.get("/api/documents/claims_manual/sections/15")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "There is no section 15."
+
+
+def test_an_unknown_document_is_refused():
+    assert client.get("/api/documents/evals/sections").status_code == 422
+    assert client.get("/api/documents/evals/sections/1").status_code == 422
+    assert client.get("/api/documents/evals").status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("name", "heading"),
+    [("queue", "# Running the queue"), ("claim", "# The UnderCover Agent")],
+)
+def test_get_instructions(name, heading):
+    response = client.get(f"/api/instructions/{name}")
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert response.text.startswith(heading)
+
+
+def test_unknown_instructions_are_refused():
+    assert client.get("/api/instructions/evals").status_code == 422
 
 
 def test_list_handlers():

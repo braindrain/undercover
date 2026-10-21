@@ -4,8 +4,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Status = Literal["waiting", "in_progress", "awaiting_sign_off", "decided"]
-StepKind = Literal["tool_call", "tool_result", "reply", "error"]
+Status = Literal[
+    "waiting", "in_progress", "awaiting_sign_off", "decided", "left_for_handler"
+]
+StepKind = Literal["tool_call", "tool_result", "read", "reply", "error"]
+RunStatus = Literal["running", "finished"]
+TodoStatus = Literal["todo", "in_progress", "done", "left_for_handler"]
 
 
 class Item(BaseModel):
@@ -64,6 +68,7 @@ class Claim(BaseModel):
     amount_claimed: float
     documents: list[Document]
     status: Status
+    failures: int
     decision: Decision | None
     payment: Payment | None
     sign_off: SignOff | None
@@ -149,3 +154,41 @@ class NewPayment(BaseModel):
 
 class NewSignOff(BaseModel):
     handler_id: str
+
+
+class SectionHeading(BaseModel):
+    number: int
+    title: str
+
+
+class Contents(BaseModel):
+    title: str
+    opening: str
+    sections: list[SectionHeading]
+
+
+class Todo(BaseModel):
+    text: str = Field(min_length=1)
+    status: TodoStatus
+
+
+class TodoList(BaseModel):
+    todos: list[Todo]
+
+
+class Run(BaseModel):
+    run_id: int
+    cap: int
+    status: RunStatus
+    summary: str | None
+    started_at: str
+    finished_at: str | None
+    todos: list[Todo]
+
+
+class NewRun(BaseModel):
+    cap: int = Field(ge=1)
+
+
+class RunSummary(BaseModel):
+    summary: str = Field(min_length=1)

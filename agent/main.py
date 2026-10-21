@@ -133,8 +133,8 @@ def work(
 def run(claim_id: str, thread_id: str, llm: BaseChatModel | None = None) -> str:
     """Run the agent on one claim, recording its steps, and return its final reply."""
     with backend() as client:
-        instructions = client.get("/api/instructions").text
-        wording = client.get("/api/policy-wording").text
+        instructions = client.get("/api/instructions/claim").text
+        wording = client.get("/api/documents/policy_wording").text
         client.post(f"/api/claims/{claim_id}/start").raise_for_status()
 
         def record(kind: str, text: str) -> None:
