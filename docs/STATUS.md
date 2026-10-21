@@ -2,7 +2,7 @@
 
 The claims pilot from `docs/PLAN.md` is built: all six phases.
 
-The agent's harness from `docs/PLAN_HARNESS.md` is in progress: phases 1 to 4 of 5 are built (the backend's records and rules, the claim agent's harness, the queue agent and the dashboard). After pulling this build, reset the database with `uv run -m backend.seed`, since the tables have changed.
+The agent's harness from `docs/PLAN_HARNESS.md` is built: all five phases. After pulling this build, reset the database with `uv run -m backend.seed`, since the tables have changed.
 
 ## What's built
 
@@ -13,7 +13,7 @@ The agent's harness from `docs/PLAN_HARNESS.md` is in progress: phases 1 to 4 of
   - The queue (`#/`), with counts in each of the five states, refreshing every 5 seconds, and the agent's latest run above the table: its state, cap, start and finish, its to-do list with each item's state, and its summary, refreshing every 2 seconds.
   - Each claim (`#/claims/CLM-1001`): the story, items, documents, policy and customer, the agent's decision and payment, what the agent read, and its steps as they happen, with each section read labeled "Read". A claim left for a handler says the agent failed on it twice. "Run the agent" on a waiting claim, and "Sign off and pay" on a claim waiting for sign-off.
   - The agent's instructions for running the queue and for working a claim, with the policy wording and the claims manual below, read only (`#/instructions`).
-- `e2e/`: Playwright tests of the queue, the instructions, a claim in full, live steps, a payment, and the sign-off of a payout over the limit. They run on their own servers (ports 8001 and 5174) with their own database, `e2e/undercover-e2e.db`, reseeded on each run.
+- `e2e/`: Playwright tests of the queue, the agent's run with its to-do list and summary, a claim left for a handler, both sets of instructions, a claim in full, live steps, the sections read, long steps wrapping inside the page, a payment, and the sign-off of a payout over the limit. They run on their own servers (ports 8001 and 5174) with their own database, `e2e/undercover-e2e.db`, reseeded on each run.
 
 ## Running it
 
@@ -26,5 +26,7 @@ The agent's harness from `docs/PLAN_HARNESS.md` is in progress: phases 1 to 4 of
 ## Notes
 
 - A live run on CLM-1001 on DeepSeek V4.1 Flash read 14 sections of the wording and the manual, then approved $420.00 under Section 3, Trip Delay, and paid it, in about 15 seconds.
-- A live run capped at five claims, in 3 minutes 26 seconds, worked the five oldest claims: CLM-1001 approved and paid $420.00, CLM-1008 approved at $2,240.00 and CLM-1011 at $1,150.00 waiting for sign-off, CLM-1018 referred and CLM-1010 declined. Every to-do item ended done and the other 20 claims stayed waiting.
-- The pilot doesn't score the agent against the handlers' decisions in `data/evals/`; that comes with evaluations in a later build.
+- Two live runs capped at five claims, in 3 minutes 26 seconds and 2 minutes 38 seconds, each worked the five oldest claims with the same results: CLM-1001 approved and paid $420.00, CLM-1008 approved at $2,240.00 and CLM-1011 at $1,150.00 waiting for sign-off, CLM-1018 referred and CLM-1010 declined. Each claim read 13 to 15 sections. Every to-do item ended done, the dashboard showed the list filling in and being ticked off, and the other 20 claims stayed waiting.
+- The claim agent often asks for several tools at once, so a claim's steps can list a few tool calls and then their results in the order they finish.
+- The agent isn't scored against the handlers' decisions in `data/evals/` yet; that comes with evaluations in a later build.
+- A process killed mid-claim leaves that claim in progress until the database is reset; durable state comes in a later build.

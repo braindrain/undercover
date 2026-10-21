@@ -82,3 +82,43 @@ test("an approval over the limit waits for a handler's sign-off", async ({
   ).toBeVisible();
   await expect(page.getByText("Decided", { exact: true })).toBeVisible();
 });
+
+test("a claim's page lists the sections the agent read", async ({
+  page,
+  request,
+}) => {
+  await request.post("/api/claims/CLM-1006/start");
+  for (const heading of [
+    "Policy wording: 5. Baggage and Personal Effects",
+    "Claims manual: 7. Interpretation notes",
+  ]) {
+    await request.post("/api/claims/CLM-1006/steps", {
+      data: { kind: "read", text: `${heading}\n\n## ${heading}` },
+    });
+  }
+  await page.goto("/#/claims/CLM-1006");
+  const read = page.getByRole("region", { name: "What the agent read" });
+  await expect(read.getByRole("listitem")).toHaveText([
+    "Policy wording: 5. Baggage and Personal Effects",
+    "Claims manual: 7. Interpretation notes",
+  ]);
+  const steps = page.getByRole("region", { name: "Steps" });
+  await expect(steps.getByText("Read", { exact: true })).toHaveCount(2);
+});
+
+test("long steps wrap inside the claim page", async ({ page, request }) => {
+  await request.post("/api/claims/CLM-1007/start");
+  const long = "word ".repeat(400);
+  await request.post("/api/claims/CLM-1007/steps", {
+    data: { kind: "tool_call", text: `record_decision(reasons='${long}')` },
+  });
+  await request.post("/api/claims/CLM-1007/steps", {
+    data: { kind: "tool_result", text: `{"reasons":"${long}"}` },
+  });
+  await page.goto("/#/claims/CLM-1007");
+  await expect(page.getByText(/^record_decision/)).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+});

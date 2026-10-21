@@ -303,7 +303,13 @@ details summary {
 
 .column {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
+}
+
+.column > *,
+.step > * {
+  min-width: 0;
 }
 
 .facts {
@@ -354,6 +360,7 @@ select {
 
 .steps {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   margin: 0;
   padding: 0;
@@ -362,6 +369,7 @@ select {
 
 .step {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 8px 12px;
   border-radius: 10px;
@@ -377,6 +385,10 @@ select {
 
 .step-tool_call .step-label {
   color: var(--sea-green-text);
+}
+
+.step-tool_call .mono {
+  white-space: normal;
 }
 
 .step-reply .step-label {

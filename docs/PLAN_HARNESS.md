@@ -214,8 +214,8 @@ Test the new screens end to end, watch a real capped run in the dashboard, and b
 
 Success criteria:
 
-- [ ] `npm run e2e` passes, with the pilot's tests and new ones that: the queue page shows a run's to-do list and its summary once finished; a claim released twice shows "Left for a handler"; a claim's page lists the sections read; the instructions page shows both sets of instructions
-- [ ] `npm run e2e` passes a second time in a row, and the dev database is unchanged afterwards
-- [ ] Live run, capped at five claims: after `uv run -m backend.seed`, with `npm run dev` running, `uv run -m agent --cap 5` on the default model works five claims on its own. In the browser with the Playwright MCP server, the queue page shows the to-do list filling in and being ticked off, then the summary; each of the five claims' pages shows its steps and what the agent read; the other 20 claims stay `waiting`. The results go in `docs/STATUS.md`, then `uv run -m backend.seed` resets the database
-- [ ] `docs/SPEC.md`, `docs/TECH_STACK.md` and `docs/STATUS.md` describe the product as it now is
-- [ ] `npm run check` passes in full: ruff, pyright, pytest at 80% or more, ESLint, Prettier, tsc, vitest at 80% or more, and Playwright
+- [x] `npm run e2e` passes, with the pilot's tests and new ones that: the queue page shows a run's to-do list and its summary once finished; a claim released twice shows "Left for a handler"; a claim's page lists the sections read; the instructions page shows both sets of instructions
+- [x] `npm run e2e` passes a second time in a row, and the dev database is unchanged afterwards
+- [x] Live run, capped at five claims: after `uv run -m backend.seed`, with `npm run dev` running, `uv run -m agent --cap 5` on the default model works five claims on its own. In the browser with the Playwright MCP server, the queue page shows the to-do list filling in and being ticked off, then the summary; each of the five claims' pages shows its steps and what the agent read; the other 20 claims stay `waiting`. The results go in `docs/STATUS.md`, then `uv run -m backend.seed` resets the database
+- [x] `docs/SPEC.md`, `docs/TECH_STACK.md` and `docs/STATUS.md` describe the product as it now is
+- [x] `npm run check` passes in full: ruff, pyright, pytest at 80% or more, ESLint, Prettier, tsc, vitest at 80% or more, and Playwright
