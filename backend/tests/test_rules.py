@@ -1,8 +1,6 @@
-import json
-from contextlib import closing
-
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import update
 
 from backend import db
 from backend.main import app
@@ -220,16 +218,13 @@ def test_sign_off_needs_a_known_handler():
 def test_sign_off_needs_a_handler_who_can_approve_over_the_limit():
     start("CLM-1002")
     decide("CLM-1002", payout=1150.0)
-    with closing(db.connect()) as conn, conn:
-        handler = json.loads(
-            conn.execute(
-                "SELECT data FROM handlers WHERE handler_id = 'HND-03'"
-            ).fetchone()["data"]
-        )
-        handler["can_approve_over_limit"] = False
+    handler = client.get("/api/handlers").json()[2]
+    assert handler["handler_id"] == "HND-03"
+    with db.engine().begin() as conn:
         conn.execute(
-            "UPDATE handlers SET data = ? WHERE handler_id = 'HND-03'",
-            (json.dumps(handler),),
+            update(db.handlers)
+            .where(db.handlers.c.handler_id == "HND-03")
+            .values(data={**handler, "can_approve_over_limit": False})
         )
     assert refusal(sign_off("CLM-1002", "HND-03")) == (
         "Priya Raman can't sign off payouts over the limit."

@@ -1,9 +1,6 @@
 """The UnderCover backend."""
 
-import json
-import sqlite3
 from collections.abc import Iterator
-from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
@@ -11,6 +8,7 @@ from uuid import uuid4
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
+from sqlalchemy import Connection, Table, delete, func, insert, select, update
 
 from agent.agents import work_claim
 from backend import db, documents, payout
@@ -48,45 +46,24 @@ class MarkdownResponse(PlainTextResponse):
     media_type = "text/markdown"
 
 
-def database() -> Iterator[sqlite3.Connection]:
-    """Open the database for one request, committing if the request succeeds."""
-    with closing(db.connect()) as conn, conn:
+def database() -> Iterator[Connection]:
+    """Open the database for one request, committing when the operation returns
+    and before the response and any background task."""
+    with db.engine().begin() as conn:
         yield conn
 
 
-Database = Annotated[sqlite3.Connection, Depends(database)]
+Database = Annotated[Connection, Depends(database, scope="function")]
 
 
-Table = Literal[
-    "claims",
-    "policies",
-    "customers",
-    "handlers",
-    "decisions",
-    "payments",
-    "sign_offs",
-    "runs",
-]
-
-LOOKUPS: dict[Table, str] = {
-    "claims": "SELECT * FROM claims WHERE claim_id = ?",
-    "policies": "SELECT * FROM policies WHERE policy_id = ?",
-    "customers": "SELECT * FROM customers WHERE customer_id = ?",
-    "handlers": "SELECT * FROM handlers WHERE handler_id = ?",
-    "decisions": "SELECT * FROM decisions WHERE claim_id = ?",
-    "payments": "SELECT * FROM payments WHERE claim_id = ?",
-    "sign_offs": "SELECT * FROM sign_offs WHERE claim_id = ?",
-    "runs": "SELECT * FROM runs WHERE run_id = ?",
-}
-
-
-def lookup(conn: sqlite3.Connection, table: Table, record_id: str | int) -> dict | None:
+def lookup(conn: Connection, table: Table, record_id: str | int) -> dict | None:
     """Return one row by its id, or None."""
-    row = conn.execute(LOOKUPS[table], (record_id,)).fetchone()
+    [key] = table.primary_key.columns
+    row = conn.execute(select(table).where(key == record_id)).mappings().first()
     return dict(row) if row else None
 
 
-def find(conn: sqlite3.Connection, table: Table, record_id: str | int) -> dict:
+def find(conn: Connection, table: Table, record_id: str | int) -> dict:
     """Return one row by its id, or raise a 404."""
     row = lookup(conn, table, record_id)
     if row is None:
@@ -94,18 +71,18 @@ def find(conn: sqlite3.Connection, table: Table, record_id: str | int) -> dict:
     return row
 
 
-def load_claim(conn: sqlite3.Connection, claim_id: str) -> Claim:
+def load_claim(conn: Connection, claim_id: str) -> Claim:
     """Return a claim with its decision, payment and sign-off."""
-    row = find(conn, "claims", claim_id)
+    row = find(conn, db.claims, claim_id)
     return Claim.model_validate(
         {
-            **json.loads(row["data"]),
+            **row["data"],
             "status": row["status"],
             "failures": row["failures"],
             "thread_id": row["thread_id"],
-            "decision": lookup(conn, "decisions", claim_id),
-            "payment": lookup(conn, "payments", claim_id),
-            "sign_off": lookup(conn, "sign_offs", claim_id),
+            "decision": lookup(conn, db.decisions, claim_id),
+            "payment": lookup(conn, db.payments, claim_id),
+            "sign_off": lookup(conn, db.sign_offs, claim_id),
         }
     )
 
@@ -129,31 +106,37 @@ def require_status(claim: Claim, status: Status, action: str) -> None:
         )
 
 
-def set_status(conn: sqlite3.Connection, claim_id: str, status: Status) -> None:
-    """Move a claim to a new state."""
-    conn.execute("UPDATE claims SET status = ? WHERE claim_id = ?", (status, claim_id))
+def update_claim(conn: Connection, claim_id: str, **values: object) -> None:
+    """Change a claim's status, failures or thread."""
+    conn.execute(
+        update(db.claims).where(db.claims.c.claim_id == claim_id).values(**values)
+    )
 
 
-def pay(conn: sqlite3.Connection, claim_id: str, amount: float) -> None:
+def pay(conn: Connection, claim_id: str, amount: float) -> None:
     """Record a payment."""
-    conn.execute("INSERT INTO payments VALUES (?, ?, ?)", (claim_id, amount, now()))
+    conn.execute(
+        insert(db.payments).values(claim_id=claim_id, amount=amount, paid_at=now())
+    )
 
 
-def load_customer(conn: sqlite3.Connection, customer_id: str) -> Customer:
+def load_customer(conn: Connection, customer_id: str) -> Customer:
     """Return a customer with their contact details and claim history."""
-    return Customer(**json.loads(find(conn, "customers", customer_id)["data"]))
+    return Customer(**find(conn, db.customers, customer_id)["data"])
 
 
-def load_run(conn: sqlite3.Connection, run_id: int) -> Run:
+def load_run(conn: Connection, run_id: int) -> Run:
     """Return a run with its to-do list, in order."""
-    run = find(conn, "runs", run_id)
+    run = find(conn, db.runs, run_id)
     todos = conn.execute(
-        "SELECT text, status FROM todos WHERE run_id = ? ORDER BY position", (run_id,)
-    ).fetchall()
+        select(db.todos.c.text, db.todos.c.status)
+        .where(db.todos.c.run_id == run_id)
+        .order_by(db.todos.c.position)
+    ).mappings()
     return Run(**run, todos=[Todo.model_validate(dict(todo)) for todo in todos])
 
 
-def running_run(conn: sqlite3.Connection, run_id: int) -> Run:
+def running_run(conn: Connection, run_id: int) -> Run:
     """Return a run that is still running, or refuse."""
     run = load_run(conn, run_id)
     if run.status != "running":
@@ -171,20 +154,21 @@ def health() -> dict[str, str]:
 def list_claims(conn: Database) -> list[ClaimSummary]:
     """List the claims queue with where each claim stands."""
     rows = conn.execute(
-        """
-        SELECT claims.data, claims.status, customers.data AS customer,
-               decisions.decision, decisions.payout
-        FROM claims
-        JOIN customers
-          ON customers.customer_id = json_extract(claims.data, '$.customer_id')
-        LEFT JOIN decisions USING (claim_id)
-        ORDER BY claims.claim_id
-        """
-    ).fetchall()
+        select(
+            db.claims.c.data,
+            db.claims.c.status,
+            db.customers.c.data.label("customer"),
+            db.decisions.c.decision,
+            db.decisions.c.payout,
+        )
+        .join(db.customers, db.customers.c.customer_id == db.claims.c.customer_id)
+        .outerjoin(db.decisions, db.decisions.c.claim_id == db.claims.c.claim_id)
+        .order_by(db.claims.c.claim_id)
+    ).mappings()
     return [
         ClaimSummary(
-            **json.loads(row["data"]),
-            customer_name=json.loads(row["customer"])["name"],
+            **row["data"],
+            customer_name=row["customer"]["name"],
             status=row["status"],
             decision=row["decision"],
             payout=row["payout"],
@@ -202,7 +186,7 @@ def get_claim(claim_id: str, conn: Database) -> Claim:
 @app.get("/api/policies/{policy_id}", operation_id="get_policy")
 def get_policy(policy_id: str, conn: Database) -> Policy:
     """Return one policy."""
-    return Policy(**json.loads(find(conn, "policies", policy_id)["data"]))
+    return Policy(**find(conn, db.policies, policy_id)["data"])
 
 
 @app.post("/api/policies/{policy_id}/payout", operation_id="work_out_payout")
@@ -265,17 +249,16 @@ def get_instructions(name: Literal["queue", "claim"]) -> str:
 @app.get("/api/handlers", operation_id="list_handlers")
 def list_handlers(conn: Database) -> list[Handler]:
     """List the claims handlers."""
-    rows = conn.execute("SELECT data FROM handlers ORDER BY handler_id").fetchall()
-    return [Handler(**json.loads(row["data"])) for row in rows]
+    rows = conn.execute(select(db.handlers.c.data).order_by(db.handlers.c.handler_id))
+    return [Handler(**data) for data in rows.scalars()]
 
 
 @app.post("/api/claims/{claim_id}/start", operation_id="start_claim")
 def start_claim(claim_id: str, conn: Database) -> Claim:
     """Move a waiting claim to in progress, on a new thread for the agent's work."""
     require_status(load_claim(conn, claim_id), "waiting", "started")
-    conn.execute(
-        "UPDATE claims SET status = 'in_progress', thread_id = ? WHERE claim_id = ?",
-        (f"{claim_id}-{uuid4().hex[:8]}", claim_id),
+    update_claim(
+        conn, claim_id, status="in_progress", thread_id=f"{claim_id}-{uuid4().hex[:8]}"
     )
     return load_claim(conn, claim_id)
 
@@ -287,24 +270,24 @@ def release_claim(claim_id: str, conn: Database) -> Claim:
     if claim.status == "in_progress":
         failures = claim.failures + 1
         status = "left_for_handler" if failures >= MAX_FAILURES else "waiting"
-        conn.execute(
-            "UPDATE claims SET status = ?, failures = ? WHERE claim_id = ?",
-            (status, failures, claim_id),
-        )
+        update_claim(conn, claim_id, status=status, failures=failures)
     return load_claim(conn, claim_id)
 
 
 @app.post("/api/claims/{claim_id}/steps", operation_id="record_step")
 def record_step(claim_id: str, step: NewStep, conn: Database) -> Step:
     """Record one step the agent took on a claim."""
-    find(conn, "claims", claim_id)
+    find(conn, db.claims, claim_id)
     created_at = now()
-    cursor = conn.execute(
-        "INSERT INTO steps (claim_id, kind, text, created_at) VALUES (?, ?, ?, ?)",
-        (claim_id, step.kind, step.text, created_at),
-    )
+    step_id = conn.execute(
+        insert(db.steps)
+        .values(
+            claim_id=claim_id, kind=step.kind, text=step.text, created_at=created_at
+        )
+        .returning(db.steps.c.step_id)
+    ).scalar_one()
     return Step(
-        step_id=cursor.lastrowid or 0,
+        step_id=step_id,
         kind=step.kind,
         text=step.text,
         created_at=created_at,
@@ -314,10 +297,12 @@ def record_step(claim_id: str, step: NewStep, conn: Database) -> Step:
 @app.get("/api/claims/{claim_id}/steps", operation_id="list_steps")
 def list_steps(claim_id: str, conn: Database) -> list[Step]:
     """List the steps the agent took on a claim, oldest first."""
-    find(conn, "claims", claim_id)
+    find(conn, db.claims, claim_id)
     rows = conn.execute(
-        "SELECT * FROM steps WHERE claim_id = ? ORDER BY step_id", (claim_id,)
-    ).fetchall()
+        select(db.steps)
+        .where(db.steps.c.claim_id == claim_id)
+        .order_by(db.steps.c.step_id)
+    ).mappings()
     return [Step.model_validate(dict(row)) for row in rows]
 
 
@@ -330,20 +315,16 @@ def record_decision(claim_id: str, decision: NewDecision, conn: Database) -> Cla
     if decision.decision != "approve" and decision.payout != 0:
         raise HTTPException(409, f"A {decision.decision} has a payout of $0.00.")
     conn.execute(
-        "INSERT INTO decisions VALUES (?, ?, ?, ?, ?, ?)",
-        (
-            claim_id,
-            decision.decision,
-            decision.payout,
-            decision.reasons,
-            decision.policy_section,
-            now(),
-        ),
+        insert(db.decisions).values(
+            claim_id=claim_id, **decision.model_dump(), decided_at=now()
+        )
     )
     over_limit = (
         decision.decision == "approve" and decision.payout > payout.APPROVAL_LIMIT
     )
-    set_status(conn, claim_id, "awaiting_sign_off" if over_limit else "decided")
+    update_claim(
+        conn, claim_id, status="awaiting_sign_off" if over_limit else "decided"
+    )
     return load_claim(conn, claim_id)
 
 
@@ -374,16 +355,18 @@ def pay_claim(claim_id: str, payment: NewPayment, conn: Database) -> Claim:
 def sign_off_claim(claim_id: str, sign_off: NewSignOff, conn: Database) -> Claim:
     """Sign off an approval over the limit, which pays its payout."""
     require_status(load_claim(conn, claim_id), "awaiting_sign_off", "signed off")
-    handler = Handler(**json.loads(find(conn, "handlers", sign_off.handler_id)["data"]))
+    handler = Handler(**find(conn, db.handlers, sign_off.handler_id)["data"])
     if not handler.can_approve_over_limit:
         raise HTTPException(
             409, f"{handler.name} can't sign off payouts over the limit."
         )
     conn.execute(
-        "INSERT INTO sign_offs VALUES (?, ?, ?)", (claim_id, handler.handler_id, now())
+        insert(db.sign_offs).values(
+            claim_id=claim_id, handler_id=handler.handler_id, signed_off_at=now()
+        )
     )
-    pay(conn, claim_id, find(conn, "decisions", claim_id)["payout"])
-    set_status(conn, claim_id, "decided")
+    pay(conn, claim_id, find(conn, db.decisions, claim_id)["payout"])
+    update_claim(conn, claim_id, status="decided")
     return load_claim(conn, claim_id)
 
 
@@ -398,32 +381,34 @@ def run_agent(claim_id: str, background: BackgroundTasks, conn: Database) -> Cla
 @app.post("/api/runs", operation_id="start_run")
 def start_run(new_run: NewRun, conn: Database) -> Run:
     """Start a run of the agent over the queue, capped at a number of claims."""
-    cursor = conn.execute(
-        "INSERT INTO runs (cap, status, started_at) VALUES (?, 'running', ?)",
-        (new_run.cap, now()),
-    )
-    return load_run(conn, cursor.lastrowid or 0)
+    run_id = conn.execute(
+        insert(db.runs)
+        .values(cap=new_run.cap, status="running", started_at=now())
+        .returning(db.runs.c.run_id)
+    ).scalar_one()
+    return load_run(conn, run_id)
 
 
 @app.get("/api/runs/latest", operation_id="get_latest_run")
 def get_latest_run(conn: Database) -> Run | None:
     """Return the latest run with its to-do list, or null before the first run."""
-    row = conn.execute("SELECT MAX(run_id) AS run_id FROM runs").fetchone()
-    return None if row["run_id"] is None else load_run(conn, row["run_id"])
+    run_id = conn.execute(select(func.max(db.runs.c.run_id))).scalar()
+    return None if run_id is None else load_run(conn, run_id)
 
 
 @app.put("/api/runs/{run_id}/todos", operation_id="set_todos")
 def set_todos(run_id: int, todo_list: TodoList, conn: Database) -> Run:
     """Replace a running run's to-do list."""
     running_run(conn, run_id)
-    conn.execute("DELETE FROM todos WHERE run_id = ?", (run_id,))
-    conn.executemany(
-        "INSERT INTO todos VALUES (?, ?, ?, ?)",
-        [
-            (run_id, position, todo.text, todo.status)
-            for position, todo in enumerate(todo_list.todos)
-        ],
-    )
+    conn.execute(delete(db.todos).where(db.todos.c.run_id == run_id))
+    if todo_list.todos:
+        conn.execute(
+            insert(db.todos),
+            [
+                {"run_id": run_id, "position": position, **todo.model_dump()}
+                for position, todo in enumerate(todo_list.todos)
+            ],
+        )
     return load_run(conn, run_id)
 
 
@@ -432,8 +417,8 @@ def finish_run(run_id: int, run_summary: RunSummary, conn: Database) -> Run:
     """Finish a running run with its summary for the handlers."""
     running_run(conn, run_id)
     conn.execute(
-        "UPDATE runs SET status = 'finished', summary = ?, finished_at = ? "
-        "WHERE run_id = ?",
-        (run_summary.summary, now(), run_id),
+        update(db.runs)
+        .where(db.runs.c.run_id == run_id)
+        .values(status="finished", summary=run_summary.summary, finished_at=now())
     )
     return load_run(conn, run_id)

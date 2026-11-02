@@ -1,71 +1,118 @@
-"""The UnderCover database, seeded from the business data in data/."""
+"""The UnderCover database, seeded from the business data in data/: Supabase's
+Postgres when DATABASE_URL is set, and a SQLite file otherwise."""
 
 import json
 import os
-import sqlite3
+from functools import cache
 from pathlib import Path
+from typing import Any
+
+from sqlalchemy import (
+    JSON,
+    Column,
+    Engine,
+    Float,
+    Integer,
+    MetaData,
+    NullPool,
+    String,
+    Table,
+    create_engine,
+    insert,
+    inspect,
+    make_url,
+    text,
+)
 
 DATA = Path(__file__).parent.parent / "data"
 DEFAULT_PATH = Path(__file__).parent / "undercover.db"
+SCHEMA = "undercover"
+POOL_SIZE = 4
 
-SEEDS = {
-    "policies.json": ("policy_id", "INSERT INTO policies VALUES (?, ?)"),
-    "customers.json": ("customer_id", "INSERT INTO customers VALUES (?, ?)"),
-    "handlers.json": ("handler_id", "INSERT INTO handlers VALUES (?, ?)"),
+metadata = MetaData()
+
+
+def record_table(name: str, key: str) -> Table:
+    """Define a table that holds one record from data/ per row, as JSON."""
+    return Table(
+        name,
+        metadata,
+        Column(key, String, primary_key=True),
+        Column("data", JSON, nullable=False),
+    )
+
+
+claims = Table(
+    "claims",
+    metadata,
+    Column("claim_id", String, primary_key=True),
+    Column("customer_id", String, nullable=False),
+    Column("policy_id", String, nullable=False),
+    Column("status", String, nullable=False),
+    Column("failures", Integer, nullable=False),
+    Column("thread_id", String),
+    Column("data", JSON, nullable=False),
+)
+policies = record_table("policies", "policy_id")
+customers = record_table("customers", "customer_id")
+handlers = record_table("handlers", "handler_id")
+steps = Table(
+    "steps",
+    metadata,
+    Column("step_id", Integer, primary_key=True, autoincrement=True),
+    Column("claim_id", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("text", String, nullable=False),
+    Column("created_at", String, nullable=False),
+)
+decisions = Table(
+    "decisions",
+    metadata,
+    Column("claim_id", String, primary_key=True),
+    Column("decision", String, nullable=False),
+    Column("payout", Float, nullable=False),
+    Column("reasons", String, nullable=False),
+    Column("policy_section", String, nullable=False),
+    Column("decided_at", String, nullable=False),
+)
+payments = Table(
+    "payments",
+    metadata,
+    Column("claim_id", String, primary_key=True),
+    Column("amount", Float, nullable=False),
+    Column("paid_at", String, nullable=False),
+)
+sign_offs = Table(
+    "sign_offs",
+    metadata,
+    Column("claim_id", String, primary_key=True),
+    Column("handler_id", String, nullable=False),
+    Column("signed_off_at", String, nullable=False),
+)
+runs = Table(
+    "runs",
+    metadata,
+    Column("run_id", Integer, primary_key=True, autoincrement=True),
+    Column("cap", Integer, nullable=False),
+    Column("status", String, nullable=False),
+    Column("summary", String),
+    Column("started_at", String, nullable=False),
+    Column("finished_at", String),
+)
+todos = Table(
+    "todos",
+    metadata,
+    Column("run_id", Integer, primary_key=True),
+    Column("position", Integer, primary_key=True),
+    Column("text", String, nullable=False),
+    Column("status", String, nullable=False),
+)
+
+RECORDS = {
+    "policies.json": (policies, "policy_id"),
+    "customers.json": (customers, "customer_id"),
+    "handlers.json": (handlers, "handler_id"),
 }
-
-SCHEMA = """
-CREATE TABLE claims (
-    claim_id TEXT PRIMARY KEY,
-    status TEXT NOT NULL,
-    failures INTEGER NOT NULL DEFAULT 0,
-    thread_id TEXT,
-    data TEXT NOT NULL
-);
-CREATE TABLE policies (policy_id TEXT PRIMARY KEY, data TEXT NOT NULL);
-CREATE TABLE customers (customer_id TEXT PRIMARY KEY, data TEXT NOT NULL);
-CREATE TABLE handlers (handler_id TEXT PRIMARY KEY, data TEXT NOT NULL);
-CREATE TABLE steps (
-    step_id INTEGER PRIMARY KEY,
-    claim_id TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    text TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-CREATE TABLE decisions (
-    claim_id TEXT PRIMARY KEY,
-    decision TEXT NOT NULL,
-    payout REAL NOT NULL,
-    reasons TEXT NOT NULL,
-    policy_section TEXT NOT NULL,
-    decided_at TEXT NOT NULL
-);
-CREATE TABLE payments (
-    claim_id TEXT PRIMARY KEY,
-    amount REAL NOT NULL,
-    paid_at TEXT NOT NULL
-);
-CREATE TABLE sign_offs (
-    claim_id TEXT PRIMARY KEY,
-    handler_id TEXT NOT NULL,
-    signed_off_at TEXT NOT NULL
-);
-CREATE TABLE runs (
-    run_id INTEGER PRIMARY KEY,
-    cap INTEGER NOT NULL,
-    status TEXT NOT NULL,
-    summary TEXT,
-    started_at TEXT NOT NULL,
-    finished_at TEXT
-);
-CREATE TABLE todos (
-    run_id INTEGER NOT NULL,
-    position INTEGER NOT NULL,
-    text TEXT NOT NULL,
-    status TEXT NOT NULL,
-    PRIMARY KEY (run_id, position)
-);
-"""
 
 
 def read_data(name: str) -> str:
@@ -74,39 +121,88 @@ def read_data(name: str) -> str:
 
 
 def database_path() -> Path:
-    """Return the database's path, from DATABASE_PATH or the default."""
+    """Return the SQLite database's path, from DATABASE_PATH or the default."""
     return Path(os.getenv("DATABASE_PATH") or DEFAULT_PATH)
 
 
-def connect() -> sqlite3.Connection:
-    """Open the database, creating and seeding it if it doesn't exist yet."""
-    path = database_path()
-    new = not path.exists()
-    conn = sqlite3.connect(path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    if new:
-        seed(conn)
-    return conn
+def database_url() -> str:
+    """Return DATABASE_URL, or the SQLite database's URL when it isn't set."""
+    return os.getenv("DATABASE_URL") or f"sqlite:///{database_path()}"
 
 
-def seed(conn: sqlite3.Connection) -> None:
+def create(url: str) -> Engine:
+    """Create an engine for a database URL without connecting: on Postgres, with
+    the psycopg driver, our schema and at most POOL_SIZE connections."""
+    parsed = make_url(url)
+    if parsed.get_backend_name() == "sqlite":
+        return create_engine(parsed, poolclass=NullPool)
+    return create_engine(
+        parsed.set(drivername="postgresql+psycopg"),
+        pool_size=POOL_SIZE,
+        max_overflow=0,
+        pool_pre_ping=True,
+        connect_args={"options": f"-c search_path={SCHEMA}"},
+    )
+
+
+@cache
+def engine_for(url: str) -> Engine:
+    """Return the engine for a database URL, creating and seeding the database on
+    first use."""
+    created = create(url)
+    if not inspect(created).has_table("claims"):
+        seed(created)
+    return created
+
+
+def engine() -> Engine:
+    """Return the engine for this process's database."""
+    return engine_for(database_url())
+
+
+def seed(target: Engine) -> None:
     """Create the tables and load the claims queue and the records behind it."""
-    conn.executescript(SCHEMA)
-    for claim in json.loads(read_data("claims.json")):
-        claim.pop("status")
-        conn.execute(
-            "INSERT INTO claims (claim_id, status, data) VALUES (?, 'waiting', ?)",
-            (claim["claim_id"], json.dumps(claim)),
-        )
-    for name, (key, insert) in SEEDS.items():
-        for record in json.loads(read_data(name)):
-            conn.execute(insert, (record[key], json.dumps(record)))
-    conn.commit()
+    with target.begin() as conn:
+        if target.dialect.name == "postgresql":
+            conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
+        metadata.create_all(conn)
+        queue: list[dict[str, Any]] = json.loads(read_data("claims.json"))
+        for claim in queue:
+            claim.pop("status")
+        if queue:
+            conn.execute(
+                insert(claims),
+                [
+                    {
+                        "claim_id": claim["claim_id"],
+                        "customer_id": claim["customer_id"],
+                        "policy_id": claim["policy_id"],
+                        "status": "waiting",
+                        "failures": 0,
+                        "data": claim,
+                    }
+                    for claim in queue
+                ],
+            )
+        for name, (table, key) in RECORDS.items():
+            records = json.loads(read_data(name))
+            if records:
+                conn.execute(
+                    insert(table),
+                    [{key: record[key], "data": record} for record in records],
+                )
 
 
-def reset() -> Path:
-    """Delete the database and create it again from data/."""
-    path = database_path()
-    path.unlink(missing_ok=True)
-    connect().close()
-    return path
+def reset() -> str:
+    """Delete the database and create it again from data/, returning where."""
+    target = create(database_url())
+    if target.dialect.name == "postgresql":
+        with target.begin() as conn:
+            conn.execute(text(f"DROP SCHEMA IF EXISTS {SCHEMA} CASCADE"))
+        where = f"the {SCHEMA} schema on {target.url.host}"
+    else:
+        database_path().unlink(missing_ok=True)
+        where = str(database_path())
+    seed(target)
+    target.dispose()
+    return where

@@ -14,7 +14,7 @@ export default defineConfig({
       command:
         "uv run -m backend.seed && uv run -m uvicorn backend.main:app --port 8001",
       url: `${backendUrl}/api/health`,
-      env: { DATABASE_PATH: "e2e/undercover-e2e.db" },
+      env: { DATABASE_PATH: "e2e/undercover-e2e.db", DATABASE_URL: "" },
       reuseExistingServer: false,
     },
     {

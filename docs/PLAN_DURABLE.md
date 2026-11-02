@@ -207,14 +207,14 @@ Move the backend to SQLAlchemy Core, on Supabase when `DATABASE_URL` is set, wit
 
 Success criteria:
 
-- [ ] Every existing backend and agent test passes on SQLite, unchanged in what it checks
-- [ ] Tests check the engine: SQLite when `DATABASE_URL` is empty; with a Supabase URL (not connected), the psycopg driver, `search_path=undercover` and a pool of 4 with no overflow
-- [ ] No query in `backend/` is written as an SQL string, apart from creating and dropping the schema (a test checks there's no `SELECT`, `INSERT`, `UPDATE` or `DELETE` in a string)
-- [ ] `npm run check:python` passes with `.env` moved out of the way
-- [ ] `npm run seed` reseeds Supabase; through the Supabase MCP server, the `undercover` schema has the tables, with 25 claims all `waiting`, and the `lab` schema is untouched
-- [ ] With `npm run dev:backend` running on Supabase, `curl -s localhost:8000/api/claims` returns 25 claims, and the dashboard's queue shows them in the browser
-- [ ] Through the Supabase MCP server, `pg_stat_activity` shows at most 4 connections from the backend while the dashboard refreshes
-- [ ] `npm run e2e` still passes on SQLite, and `npm run seed` resets Supabase afterwards
+- [x] Every existing backend and agent test passes on SQLite, unchanged in what it checks
+- [x] Tests check the engine: SQLite when `DATABASE_URL` is empty; with a Supabase URL (not connected), the psycopg driver, `search_path=undercover` and a pool of 4 with no overflow
+- [x] No query in `backend/` is written as an SQL string, apart from creating and dropping the schema (a test checks there's no `SELECT`, `INSERT`, `UPDATE` or `DELETE` in a string)
+- [x] `npm run check:python` passes with `.env` moved out of the way
+- [x] `npm run seed` reseeds Supabase; through the Supabase MCP server, the `undercover` schema has the tables, with 25 claims all `waiting`, and the `lab` schema is untouched
+- [x] With `npm run dev:backend` running on Supabase, `curl -s localhost:8000/api/claims` returns 25 claims, and the dashboard's queue shows them in the browser
+- [x] Through the Supabase MCP server, `pg_stat_activity` shows at most 4 connections from the backend while the dashboard refreshes
+- [x] `npm run e2e` still passes on SQLite, and `npm run seed` resets Supabase afterwards
 
 ## Phase 3: The backend's rules for work that waits and repeats
 
