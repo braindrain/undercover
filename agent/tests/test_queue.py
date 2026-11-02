@@ -5,12 +5,15 @@ import dotenv
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from sqlalchemy import select
 
 from agent import agents, api, tools
-from agent.tests.stubs import BrokenModel, approve_and_pay, call, stub
+from agent.tests.stubs import BrokenModel, StoppingModel, approve, call, stub
+from backend import db
 from backend.main import app
 
 client = TestClient(app)
+real_work_claim = agents.work_claim
 
 
 def claim(claim_id):
@@ -250,12 +253,21 @@ def test_report_a_claim_left_for_a_handler():
 
 def test_work_claim_refuses_a_claim_that_is_not_waiting(stand_in):
     client.post("/api/claims/CLM-1001/start")
+    client.post(
+        "/api/claims/CLM-1001/decision",
+        json={
+            "decision": "decline",
+            "payout": 0,
+            "reasons": "Not covered.",
+            "policy_section": "Section 9, General exclusions",
+        },
+    )
     _, model = run_queue(
         5, work("CLM-1001"), work("CLM-9999"), AIMessage(content="Done.")
     )
     replies = [m.content for m in model.prompts[2] if isinstance(m, ToolMessage)]
     assert replies == [
-        "Refused: CLM-1001 is in progress, so it can't be worked.",
+        "Refused: CLM-1001 is decided, so it can't be worked.",
         "Refused: There is no record CLM-9999.",
     ]
     assert "CLM-1001" not in stand_in[1]
@@ -267,7 +279,7 @@ def test_both_agents_on_one_claim():
         todos(("CLM-1001", "in_progress")),
         work("CLM-1001"),
         call("get_claim", claim_id="CLM-1001"),
-        *approve_and_pay("CLM-1001", 420.0),
+        *approve("CLM-1001", 420.0),
         todos(("CLM-1001", "done")),
         AIMessage(content="Approved and paid CLM-1001."),
     )
@@ -290,6 +302,43 @@ def test_both_agents_on_one_claim():
     assert run["status"] == "finished"
     assert run["summary"] == "Approved and paid CLM-1001."
     assert run["todos"] == [{"text": "CLM-1001", "status": "done"}]
+
+
+def test_a_run_carries_on_first(stand_in):
+    stopped = StoppingModel(
+        messages=iter([call("get_claim", claim_id="CLM-1001")]), replies=1
+    )
+    with pytest.raises(KeyboardInterrupt):
+        real_work_claim("CLM-1001", stopped)
+    real_work_claim("CLM-1002", stub(*approve("CLM-1002", 1150.0)))
+    client.post(
+        "/api/claims/CLM-1002/sign-off", json={"handler_id": "HND-01"}
+    ).raise_for_status()
+    stale = client.post("/api/runs", json={"cap": 5}).json()
+
+    lines, _ = run_queue(
+        1,
+        *approve("CLM-1001", 420.0),
+        work("CLM-1003"),
+        AIMessage(content="Worked one claim."),
+    )
+    assert lines == [
+        "CLM-1001: approved, $420.00, paid.",
+        "CLM-1002: approved, $1,150.00, paid.",
+        "CLM-1003: declined.",
+        "Worked one claim.",
+    ]
+    assert stand_in[1] == ["CLM-1003"]
+    assert claim("CLM-1001")["failures"] == 0
+    with db.engine().connect() as conn:
+        finished = (
+            conn.execute(select(db.runs).where(db.runs.c.run_id == stale["run_id"]))
+            .mappings()
+            .one()
+        )
+    assert finished["status"] == "finished"
+    assert finished["summary"] == agents.STOPPED_RUN
+    assert latest_run()["summary"] == "Worked one claim."
 
 
 def test_a_queue_agent_whose_model_fails_still_finishes_the_run():

@@ -38,6 +38,18 @@ class FlakyModel(StubModel):
         return super()._generate(messages, stop, run_manager, **kwargs)
 
 
+class StoppingModel(StubModel):
+    """A chat model that stops the process, as Ctrl-C or a kill would, once it
+    has given `replies` scripted replies."""
+
+    replies: int = 0
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        if len(self.prompts) >= self.replies:
+            raise KeyboardInterrupt
+        return super()._generate(messages, stop, run_manager, **kwargs)
+
+
 def call(name, **args):
     return AIMessage(
         content="", tool_calls=[{"name": name, "args": args, "id": str(uuid4())}]
@@ -59,9 +71,8 @@ def decision(claim_id, verdict, payout):
     )
 
 
-def approve_and_pay(claim_id, payout):
+def approve(claim_id, payout):
     return [
         decision(claim_id, "approve", payout),
-        call("pay_claim", claim_id=claim_id, amount=payout),
         AIMessage(content=f"Approved {claim_id}."),
     ]

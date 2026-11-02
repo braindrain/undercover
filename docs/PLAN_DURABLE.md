@@ -246,18 +246,18 @@ Rebuild the claim agent as a LangGraph graph with a checkpointer, a wait for the
 
 Success criteria:
 
-- [ ] A stub-model test approves CLM-1001 at $420.00; the graph pays it straight after, and the claim ends `decided` with one payment, with the steps recorded as today
-- [ ] The pause: a stub-model test approves CLM-1002 at $1,150.00; the run returns with the thread waiting at `sign_off` (`get_state(...).next`), the claim is `awaiting_sign_off` with no payment, and nothing tried to pay it
-- [ ] The resume: that claim signed off through the API, `carry_on` resumes its thread and pays it once, with the handler and the time in the payment; carrying it on a second time changes nothing
-- [ ] Stopped partway: a stub model that stops the process (a `KeyboardInterrupt`) after `get_claim` and `get_policy` leaves the claim `in_progress` with no failure; `carry_on` with a new graph and model goes on from the last step on the same thread (the new model's first prompt holds the earlier tool results), and the claim ends with one decision, its failures still 0
-- [ ] A failure starts afresh: a model that always fails releases the claim with 1 failure and an error step; worked again, it runs on a new thread whose first prompt holds only the task
-- [ ] A repeated step counts as done: running the pay node again on a paid claim leaves one payment
-- [ ] The harness's other jobs still hold: a model call that fails once is retried; a refusal goes back to the model as "Refused: …"; a claim agent that never decides stops at 30 model calls, counting across a restart
-- [ ] A run carries on first: with one claim stopped partway and one signed off, `run_queue` reports both first, then starts its run, and neither counts against its cap; a latest run still marked running is finished with a summary saying it was stopped
-- [ ] Tests check the checkpointer: in memory when `DATABASE_URL` is empty; otherwise a `PostgresSaver` on a pool (not opened) of at most 4 with the lab's settings and `search_path=undercover`
-- [ ] `pay_claim` is no longer a claim tool, and the instructions don't mention paying (tests check both); they still name no claims
-- [ ] Live check, one claim, a few cents at most: after `npm run seed`, with `npm run dev:backend` running, `uv run -m agent CLM-1001` decides and pays it; through the Supabase MCP server, `undercover.checkpoints` has rows for its thread; then `npm run seed`
-- [ ] `npm run check:python` passes with coverage at or above 80%
+- [x] A stub-model test approves CLM-1001 at $420.00; the graph pays it straight after, and the claim ends `decided` with one payment, with the steps recorded as today
+- [x] The pause: a stub-model test approves CLM-1002 at $1,150.00; the run returns with the thread waiting at `sign_off` (`get_state(...).next`), the claim is `awaiting_sign_off` with no payment, and nothing tried to pay it
+- [x] The resume: that claim signed off through the API, `carry_on` resumes its thread and pays it once, with the handler and the time in the payment; carrying it on a second time changes nothing
+- [x] Stopped partway: a stub model that stops the process (a `KeyboardInterrupt`) after `get_claim` and `get_policy` leaves the claim `in_progress` with no failure; `carry_on` with a new graph and model goes on from the last step on the same thread (the new model's first prompt holds the earlier tool results), and the claim ends with one decision, its failures still 0
+- [x] A failure starts afresh: a model that always fails releases the claim with 1 failure and an error step; worked again, it runs on a new thread whose first prompt holds only the task
+- [x] A repeated step counts as done: running the pay node again on a paid claim leaves one payment
+- [x] The harness's other jobs still hold: a model call that fails once is retried; a refusal goes back to the model as "Refused: …"; a claim agent that never decides stops at 30 model calls, counting across a restart
+- [x] A run carries on first: with one claim stopped partway and one signed off, `run_queue` reports both first, then starts its run, and neither counts against its cap; a latest run still marked running is finished with a summary saying it was stopped
+- [x] Tests check the checkpointer: in memory when `DATABASE_URL` is empty; otherwise a `PostgresSaver` on a pool (not opened) of at most 4 with the lab's settings and `search_path=undercover`
+- [x] `pay_claim` is no longer a claim tool, and the instructions don't mention paying (tests check both); they still name no claims
+- [x] Live check, one claim, a few cents at most: after `npm run seed`, with `npm run dev:backend` running, `uv run -m agent CLM-1001` decides and pays it; through the Supabase MCP server, `undercover.checkpoints` has rows for its thread; then `npm run seed`
+- [x] `npm run check:python` passes with coverage at or above 80%
 
 ## Phase 5: The agent's service, the sign-off and the dashboard
 

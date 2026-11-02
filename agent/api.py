@@ -44,6 +44,14 @@ def waiting_claims() -> list[dict]:
     return [claim for claim in list_claims() if claim["status"] == "waiting"]
 
 
+def claims_in_progress() -> list[dict]:
+    return [
+        get_claim(claim["claim_id"])
+        for claim in list_claims()
+        if claim["status"] == "in_progress"
+    ]
+
+
 def get_claim(claim_id: str) -> dict:
     return request("GET", f"/api/claims/{claim_id}").json()
 
@@ -106,6 +114,10 @@ def pay_claim(claim_id: str, amount: float) -> dict:
 
 def start_run(cap: int) -> int:
     return request("POST", "/api/runs", json={"cap": cap}).json()["run_id"]
+
+
+def get_latest_run() -> dict | None:
+    return request("GET", "/api/runs/latest").json()
 
 
 def set_todos(run_id: int, todos: list[dict]) -> None:
