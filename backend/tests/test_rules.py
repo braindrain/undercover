@@ -93,6 +93,14 @@ def test_release_leaves_a_decided_claim():
     assert claim["failures"] == 0
 
 
+def test_release_leaves_an_approved_unpaid_claim_in_progress():
+    start("CLM-1001")
+    decide("CLM-1001")
+    claim = release("CLM-1001").json()
+    assert claim["status"] == "in_progress"
+    assert claim["failures"] == 0
+
+
 def test_release_leaves_a_waiting_claim():
     claim = release("CLM-1001").json()
     assert claim["status"] == "waiting"
@@ -110,20 +118,22 @@ def test_steps():
     assert client.get("/api/claims/CLM-9999/steps").status_code == 404
 
 
-def test_approve_under_the_limit_and_pay():
+def test_an_approval_is_in_progress_until_paid():
     start("CLM-1001")
     claim = decide("CLM-1001").json()
-    assert claim["status"] == "decided"
+    assert claim["status"] == "in_progress"
     assert claim["decision"]["payout"] == 420.0
     claim = pay("CLM-1001", 420.0).json()
+    assert claim["status"] == "decided"
     assert claim["payment"]["amount"] == 420.0
-    assert refusal(pay("CLM-1001", 420.0)) == "CLM-1001 has already been paid."
+    assert claim["payment"]["signed_off_by"] is None
+    assert claim["payment"]["signed_off_at"] is None
 
 
 def test_approve_at_the_limit():
     start("CLM-1001")
-    assert decide("CLM-1001", payout=1000.0).json()["status"] == "decided"
-    assert pay("CLM-1001", 1000.0).status_code == 200
+    assert decide("CLM-1001", payout=1000.0).json()["status"] == "in_progress"
+    assert pay("CLM-1001", 1000.0).json()["status"] == "decided"
 
 
 def test_payment_over_the_limit_waits_for_sign_off():
@@ -136,14 +146,47 @@ def test_payment_over_the_limit_waits_for_sign_off():
     assert claim["payment"] is None
 
 
-def test_sign_off_pays():
+def test_sign_off_puts_the_claim_back_in_progress_and_payment_records_it():
     start("CLM-1002")
     decide("CLM-1002", payout=1150.0)
     claim = sign_off("CLM-1002").json()
+    assert claim["status"] == "in_progress"
+    assert claim["payment"] is None
+    assert claim["sign_off"]["handler_id"] == "HND-01"
+    claim = pay("CLM-1002", 1150.0).json()
     assert claim["status"] == "decided"
     assert claim["payment"]["amount"] == 1150.0
-    assert claim["sign_off"]["handler_id"] == "HND-01"
-    assert refusal(pay("CLM-1002", 1150.0)) == "CLM-1002 has already been paid."
+    assert claim["payment"]["signed_off_by"] == "HND-01"
+    assert claim["payment"]["signed_off_at"] == claim["sign_off"]["signed_off_at"]
+
+
+def test_the_same_decision_twice_is_done():
+    start("CLM-1001")
+    first = decide("CLM-1001").json()
+    second = decide("CLM-1001", reasons="Covered, again.")
+    assert second.status_code == 200
+    assert second.json()["decision"] == first["decision"]
+
+
+def test_a_different_decision_is_refused():
+    start("CLM-1001")
+    decide("CLM-1001")
+    assert refusal(decide("CLM-1001", "decline", 0)) == (
+        "CLM-1001 has already been decided: approve, $420.00."
+    )
+    assert refusal(decide("CLM-1001", payout=400.0)) == (
+        "CLM-1001 has already been decided: approve, $420.00."
+    )
+
+
+def test_the_same_payment_twice_is_done():
+    start("CLM-1001")
+    decide("CLM-1001")
+    first = pay("CLM-1001", 420.0).json()
+    second = pay("CLM-1001", 420.0)
+    assert second.status_code == 200
+    assert second.json()["payment"] == first["payment"]
+    assert refusal(pay("CLM-1001", 400.0)) == "CLM-1001 has already been paid $420.00."
 
 
 @pytest.mark.parametrize(
@@ -162,11 +205,6 @@ def test_decision_and_payout_must_agree(decision, payout, reason):
 def test_decide_only_a_claim_in_progress():
     assert refusal(decide("CLM-1001")) == (
         "CLM-1001 is waiting, so it can't be decided."
-    )
-    start("CLM-1001")
-    decide("CLM-1001")
-    assert refusal(decide("CLM-1001")) == (
-        "CLM-1001 is decided, so it can't be decided."
     )
 
 
@@ -205,7 +243,13 @@ def test_sign_off_only_a_claim_awaiting_it():
     start("CLM-1001")
     decide("CLM-1001")
     assert refusal(sign_off("CLM-1001")) == (
-        "CLM-1001 is decided, so it can't be signed off."
+        "CLM-1001 is in progress, so it can't be signed off."
+    )
+    start("CLM-1002")
+    decide("CLM-1002", payout=1150.0)
+    sign_off("CLM-1002")
+    assert refusal(sign_off("CLM-1002")) == (
+        "CLM-1002 is in progress, so it can't be signed off."
     )
 
 

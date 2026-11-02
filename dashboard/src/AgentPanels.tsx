@@ -25,15 +25,21 @@ function useHandlers() {
 
 function Payment({ claim }: Readonly<{ claim: Claim }>) {
   const handlers = useHandlers();
-  if (claim.payment) {
+  const byWhom = (handlerId: string, at: string) => {
     const handler = handlers.find(
-      (candidate) => candidate.handler_id === claim.sign_off?.handler_id,
+      (candidate) => candidate.handler_id === handlerId,
     );
+    return `by ${handler?.name ?? handlerId} on ${formatTime(at)}`;
+  };
+  const { payment, sign_off: signOff } = claim;
+  if (payment) {
     return (
       <p>
-        Paid <Money amount={claim.payment.amount} /> on{" "}
-        {formatTime(claim.payment.paid_at)}
-        {handler && `, signed off by ${handler.name}`}.
+        Paid <Money amount={payment.amount} /> on {formatTime(payment.paid_at)}
+        {payment.signed_off_by &&
+          payment.signed_off_at &&
+          `, signed off ${byWhom(payment.signed_off_by, payment.signed_off_at)}`}
+        .
       </p>
     );
   }
@@ -42,6 +48,14 @@ function Payment({ claim }: Readonly<{ claim: Claim }>) {
       <p className="alert">
         Payment blocked: the payout is over the approval limit and waits for a
         handler's sign-off.
+      </p>
+    );
+  }
+  if (signOff) {
+    return (
+      <p>
+        Signed off {byWhom(signOff.handler_id, signOff.signed_off_at)}. The
+        agent is paying it.
       </p>
     );
   }
@@ -169,7 +183,7 @@ export function SignOffForm({
           </select>
         </label>
         <button className="button" type="button" onClick={signOff}>
-          Sign off and pay
+          Sign off
         </button>
       </div>
       {error && (

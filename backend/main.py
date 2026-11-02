@@ -97,6 +97,11 @@ def money(amount: float) -> str:
     return f"${amount:,.2f}"
 
 
+def same_amount(first: float, second: float) -> bool:
+    """Return whether two amounts are the same to the cent."""
+    return round(first, 2) == round(second, 2)
+
+
 def require_status(claim: Claim, status: Status, action: str) -> None:
     """Refuse an action unless the claim is in the given state."""
     if claim.status != status:
@@ -110,13 +115,6 @@ def update_claim(conn: Connection, claim_id: str, **values: object) -> None:
     """Change a claim's status, failures or thread."""
     conn.execute(
         update(db.claims).where(db.claims.c.claim_id == claim_id).values(**values)
-    )
-
-
-def pay(conn: Connection, claim_id: str, amount: float) -> None:
-    """Record a payment."""
-    conn.execute(
-        insert(db.payments).values(claim_id=claim_id, amount=amount, paid_at=now())
     )
 
 
@@ -265,9 +263,9 @@ def start_claim(claim_id: str, conn: Database) -> Claim:
 
 @app.post("/api/claims/{claim_id}/release", operation_id="release_claim")
 def release_claim(claim_id: str, conn: Database) -> Claim:
-    """Count a failure on a claim in progress and return it, leaving others as is."""
+    """Count a failure on an undecided claim in progress, leaving others as is."""
     claim = load_claim(conn, claim_id)
-    if claim.status == "in_progress":
+    if claim.status == "in_progress" and claim.decision is None:
         failures = claim.failures + 1
         status = "left_for_handler" if failures >= MAX_FAILURES else "waiting"
         update_claim(conn, claim_id, status=status, failures=failures)
@@ -309,7 +307,19 @@ def list_steps(claim_id: str, conn: Database) -> list[Step]:
 @app.post("/api/claims/{claim_id}/decision", operation_id="record_decision")
 def record_decision(claim_id: str, decision: NewDecision, conn: Database) -> Claim:
     """Record the decision on a claim in progress, with its payout and reasons."""
-    require_status(load_claim(conn, claim_id), "in_progress", "decided")
+    claim = load_claim(conn, claim_id)
+    if claim.decision:
+        recorded = claim.decision
+        if recorded.decision == decision.decision and same_amount(
+            recorded.payout, decision.payout
+        ):
+            return claim
+        raise HTTPException(
+            409,
+            f"{claim_id} has already been decided: {recorded.decision}, "
+            f"{money(recorded.payout)}.",
+        )
+    require_status(claim, "in_progress", "decided")
     if decision.decision == "approve" and decision.payout == 0:
         raise HTTPException(409, "An approval needs a payout above $0.00.")
     if decision.decision != "approve" and decision.payout != 0:
@@ -319,41 +329,53 @@ def record_decision(claim_id: str, decision: NewDecision, conn: Database) -> Cla
             claim_id=claim_id, **decision.model_dump(), decided_at=now()
         )
     )
-    over_limit = (
-        decision.decision == "approve" and decision.payout > payout.APPROVAL_LIMIT
-    )
-    update_claim(
-        conn, claim_id, status="awaiting_sign_off" if over_limit else "decided"
-    )
+    if decision.decision != "approve":
+        update_claim(conn, claim_id, status="decided")
+    elif decision.payout > payout.APPROVAL_LIMIT:
+        update_claim(conn, claim_id, status="awaiting_sign_off")
     return load_claim(conn, claim_id)
 
 
 @app.post("/api/claims/{claim_id}/payments", operation_id="pay_claim")
 def pay_claim(claim_id: str, payment: NewPayment, conn: Database) -> Claim:
-    """Pay an approved claim its payout."""
+    """Pay an approved claim its payout, which decides it."""
     claim = load_claim(conn, claim_id)
     if claim.decision is None or claim.decision.decision != "approve":
         raise HTTPException(409, f"{claim_id} has no approval to pay.")
     if claim.payment:
-        raise HTTPException(409, f"{claim_id} has already been paid.")
+        if same_amount(claim.payment.amount, payment.amount):
+            return claim
+        raise HTTPException(
+            409, f"{claim_id} has already been paid {money(claim.payment.amount)}."
+        )
     if claim.decision.payout > payout.APPROVAL_LIMIT and claim.sign_off is None:
         raise HTTPException(
             409,
             f"This payout is over the {money(payout.APPROVAL_LIMIT)} approval limit "
             "and waits for a handler's sign-off.",
         )
-    if round(payment.amount, 2) != round(claim.decision.payout, 2):
+    if not same_amount(payment.amount, claim.decision.payout):
         raise HTTPException(
             409,
             f"The amount must be the approved payout, {money(claim.decision.payout)}.",
         )
-    pay(conn, claim_id, payment.amount)
+    sign_off = claim.sign_off
+    conn.execute(
+        insert(db.payments).values(
+            claim_id=claim_id,
+            amount=payment.amount,
+            paid_at=now(),
+            signed_off_by=sign_off.handler_id if sign_off else None,
+            signed_off_at=sign_off.signed_off_at if sign_off else None,
+        )
+    )
+    update_claim(conn, claim_id, status="decided")
     return load_claim(conn, claim_id)
 
 
 @app.post("/api/claims/{claim_id}/sign-off", operation_id="sign_off_claim")
 def sign_off_claim(claim_id: str, sign_off: NewSignOff, conn: Database) -> Claim:
-    """Sign off an approval over the limit, which pays its payout."""
+    """Sign off an approval over the limit, for the agent to pay."""
     require_status(load_claim(conn, claim_id), "awaiting_sign_off", "signed off")
     handler = Handler(**find(conn, db.handlers, sign_off.handler_id)["data"])
     if not handler.can_approve_over_limit:
@@ -365,8 +387,7 @@ def sign_off_claim(claim_id: str, sign_off: NewSignOff, conn: Database) -> Claim
             claim_id=claim_id, handler_id=handler.handler_id, signed_off_at=now()
         )
     )
-    pay(conn, claim_id, find(conn, db.decisions, claim_id)["payout"])
-    update_claim(conn, claim_id, status="decided")
+    update_claim(conn, claim_id, status="in_progress")
     return load_claim(conn, claim_id)
 
 

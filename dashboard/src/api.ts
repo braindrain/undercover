@@ -55,8 +55,14 @@ export interface Claim {
   documents: ClaimDocument[];
   status: Status;
   failures: number;
+  thread_id: string | null;
   decision: Decision | null;
-  payment: { amount: number; paid_at: string } | null;
+  payment: {
+    amount: number;
+    paid_at: string;
+    signed_off_by: string | null;
+    signed_off_at: string | null;
+  } | null;
   sign_off: { handler_id: string; signed_off_at: string } | null;
 }
 

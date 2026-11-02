@@ -226,13 +226,13 @@ Change the rules so that unfinished work is always in progress, a repeat is done
 
 Success criteria:
 
-- [ ] Tests pass for the new moves: an approval of $420.00 is `in_progress` until paid, then `decided`; an approval of $1,150.00 is `awaiting_sign_off`, signed off it's `in_progress` with the sign-off and no payment, and paid it's `decided` with the payment's `signed_off_by` and `signed_off_at`
-- [ ] Tests pass for repeats: the same decision twice returns the claim with one decision; a different decision is refused with `409`; the same payment twice returns the claim with one payment; a different amount is refused
-- [ ] Tests pass for the old refusals that still hold: paying over the limit before the sign-off, paying a decline, signing off a claim that isn't awaiting sign-off, signing off as a handler who can't
-- [ ] A test releases an approved, unpaid claim and it stays `in_progress` with no failure counted
-- [ ] Vitest tests pass for the sign-off form's "Sign off" button, a signed-off claim in progress, and a paid claim naming the handler and the time of the sign-off
-- [ ] `npm run e2e` passes, with the sign-off test now expecting the claim in progress and signed off, not paid (Phase 5 brings the payment back through the agent's stand-in), and the payment test paying before the claim shows `Decided`
-- [ ] `npm run check:python` and `npm run check:ts` pass with coverage at or above 80%
+- [x] Tests pass for the new moves: an approval of $420.00 is `in_progress` until paid, then `decided`; an approval of $1,150.00 is `awaiting_sign_off`, signed off it's `in_progress` with the sign-off and no payment, and paid it's `decided` with the payment's `signed_off_by` and `signed_off_at`
+- [x] Tests pass for repeats: the same decision twice returns the claim with one decision; a different decision is refused with `409`; the same payment twice returns the claim with one payment; a different amount is refused
+- [x] Tests pass for the old refusals that still hold: paying over the limit before the sign-off, paying a decline, signing off a claim that isn't awaiting sign-off, signing off as a handler who can't
+- [x] A test releases an approved, unpaid claim and it stays `in_progress` with no failure counted
+- [x] Vitest tests pass for the sign-off form's "Sign off" button, a signed-off claim in progress, and a paid claim naming the handler and the time of the sign-off
+- [x] `npm run e2e` passes, with the sign-off test now expecting the claim in progress and signed off, not paid (Phase 5 brings the payment back through the agent's stand-in), and the payment test paying before the claim shows `Decided`
+- [x] `npm run check:python` and `npm run check:ts` pass with coverage at or above 80%
 
 ## Phase 4: The claim agent as a graph
 

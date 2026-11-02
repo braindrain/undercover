@@ -76,11 +76,13 @@ test("an approval over the limit waits for a handler's sign-off", async ({
   await expect(page.getByText("Waiting for sign-off")).toBeVisible();
   await expect(page.getByText(/Payment blocked/)).toBeVisible();
   await page.getByLabel("Handler").selectOption({ label: "Dana Whitfield" });
-  await page.getByRole("button", { name: "Sign off and pay" }).click();
+  await page.getByRole("button", { name: "Sign off" }).click();
   await expect(
-    page.getByText(/^Paid \$1,150\.00 .* signed off by Dana Whitfield\.$/),
+    page.getByText(
+      /^Signed off by Dana Whitfield on .*\. The agent is paying it\.$/,
+    ),
   ).toBeVisible();
-  await expect(page.getByText("Decided", { exact: true })).toBeVisible();
+  await expect(page.getByText("In progress", { exact: true })).toBeVisible();
 });
 
 test("a claim's page lists the sections the agent read", async ({

@@ -45,6 +45,7 @@ function claim(changes: Partial<Claim>): Claim {
     ],
     status: "waiting",
     failures: 0,
+    thread_id: null,
     decision: null,
     payment: null,
     sign_off: null,
@@ -202,7 +203,12 @@ it("shows a decided claim with its decision and payment", async () => {
       claim({
         status: "decided",
         decision,
-        payment: { amount: 420, paid_at: "2026-10-19T17:49:52+00:00" },
+        payment: {
+          amount: 420,
+          paid_at: "2026-10-19T17:49:52+00:00",
+          signed_off_by: null,
+          signed_off_at: null,
+        },
       }),
       steps,
     ),
@@ -213,9 +219,37 @@ it("shows a decided claim with its decision and payment", async () => {
   expect(within(panel).getByText("The delay is covered.")).toBeDefined();
   expect(within(panel).getByText("Section 3, Trip Delay")).toBeDefined();
   expect(within(panel).getByText(/^Paid/).textContent).toMatch(
-    /^Paid \$420\.00 on Oct 19, 2026/,
+    /^Paid \$420\.00 on Oct 19, 2026, \d+:\d+ [AP]M\.$/,
   );
   expect(await screen.findByText("Result")).toBeDefined();
+});
+
+it("shows who signed off a paid claim, and when", async () => {
+  stubFetch(
+    routes(
+      claim({
+        status: "decided",
+        decision: { ...decision, payout: 1150 },
+        sign_off: {
+          handler_id: "HND-02",
+          signed_off_at: "2026-10-19T17:56:43+00:00",
+        },
+        payment: {
+          amount: 1150,
+          paid_at: "2026-10-19T17:56:47+00:00",
+          signed_off_by: "HND-02",
+          signed_off_at: "2026-10-19T17:56:43+00:00",
+        },
+      }),
+    ),
+  );
+  render(<ClaimPage claimId="CLM-1001" />);
+  const panel = await screen.findByRole("region", { name: "Decision" });
+  expect(
+    (await within(panel).findByText(/Marcus Oyelaran/)).textContent,
+  ).toMatch(
+    /^Paid \$1,150\.00 on Oct 19, 2026, .+, signed off by Marcus Oyelaran on Oct 19, 2026, .+\.$/,
+  );
 });
 
 it("shows a decline without a payment", async () => {
@@ -250,14 +284,18 @@ it("signs off a payout over the limit", async () => {
   });
   current["/api/claims/CLM-1001"] = {
     ...awaiting,
-    status: "decided",
-    payment: { amount: 1150, paid_at: "2026-10-19T17:56:43+00:00" },
-    sign_off: { handler_id: "HND-02", signed_off_at: "2026-10-19T17:56:43" },
+    status: "in_progress",
+    sign_off: {
+      handler_id: "HND-02",
+      signed_off_at: "2026-10-19T17:56:43+00:00",
+    },
   };
-  fireEvent.click(screen.getByRole("button", { name: "Sign off and pay" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sign off" }));
   expect(
-    await screen.findByText(/signed off by Marcus Oyelaran/),
-  ).toBeDefined();
+    (await screen.findByText(/^Signed off by Marcus Oyelaran/)).textContent,
+  ).toMatch(
+    /^Signed off by Marcus Oyelaran on Oct 19, 2026, .+\. The agent is paying it\.$/,
+  );
   expect(posts(fetchMock)).toEqual(["/api/claims/CLM-1001/sign-off"]);
   expect(fetchMock).toHaveBeenCalledWith(
     "/api/claims/CLM-1001/sign-off",
@@ -280,7 +318,7 @@ it("shows why a sign-off was refused", async () => {
   });
   render(<ClaimPage claimId="CLM-1001" />);
   await screen.findByRole("option", { name: "Dana Whitfield" });
-  fireEvent.click(screen.getByRole("button", { name: "Sign off and pay" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sign off" }));
   expect((await screen.findByRole("alert")).textContent).toBe(
     "CLM-1001 is decided.",
   );
