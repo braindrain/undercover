@@ -3,6 +3,7 @@ LangGraph graph that works one claim on its own thread, waits for a handler's
 sign-off when the backend says so, pays an approval, and carries on after a stop."""
 
 from collections.abc import Iterator
+from contextvars import Context
 from dataclasses import dataclass
 from functools import partial
 from typing import Annotated, Any, TypedDict
@@ -149,7 +150,11 @@ def run_thread(claim: dict, start: Any, llm: BaseChatModel | None) -> str:
     )
     config = harness.thread_config(claim["thread_id"])
     try:
-        result = claim_graph().invoke(start, config, context=context, durability="sync")
+        # A fresh context makes each claim a trace of its own in Langfuse, with
+        # its session, even when the queue agent's tool hands it out.
+        result = Context().run(
+            claim_graph().invoke, start, config, context=context, durability="sync"
+        )
     except Exception as error:
         api.record_step(claim_id, "error", f"The agent stopped: {error}")
         api.release_claim(claim_id)

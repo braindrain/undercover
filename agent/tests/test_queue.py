@@ -4,10 +4,11 @@ import sys
 import dotenv
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from sqlalchemy import select
 
-from agent import agents, api, tools
+from agent import agents, api, harness, tools
 from agent.tests.stubs import BrokenModel, StoppingModel, approve, call, stub
 from backend import db
 from backend.main import app
@@ -339,6 +340,24 @@ def test_a_run_carries_on_first(stand_in):
     assert finished["status"] == "finished"
     assert finished["summary"] == agents.STOPPED_RUN
     assert latest_run()["summary"] == "Worked one claim."
+
+
+def test_each_claim_is_a_run_of_its_own_inside_the_queue(monkeypatch):
+    roots = []
+
+    class Roots(BaseCallbackHandler):
+        def on_chain_start(self, serialized, inputs, *, parent_run_id=None, **kw):
+            if parent_run_id is None:
+                roots.append(kw.get("name"))
+
+    real = harness.thread_config
+    monkeypatch.setattr(
+        harness,
+        "thread_config",
+        lambda thread_id: {**real(thread_id), "callbacks": [Roots()]},
+    )
+    run_queue(1, work("CLM-1001"), *approve("CLM-1001", 420.0), AIMessage("Done."))
+    assert roots == ["LangGraph"]
 
 
 def test_a_queue_agent_whose_model_fails_still_finishes_the_run():

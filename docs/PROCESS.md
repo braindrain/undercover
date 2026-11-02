@@ -1,12 +1,14 @@
 # Process
 
-`uv sync` and `npm install` at the repo root install everything, including a git pre-commit hook. `npm run dev` starts the backend and the dashboard.
+`uv sync` and `npm install` at the repo root install everything, including a git pre-commit hook. `npm run dev` starts three servers: the backend, the agent's service and the dashboard. It needs `.env`, and the backend and the agent use Supabase through its `DATABASE_URL`. `npm run seed` reseeds Supabase, after which `npm run dev` is restarted; `uv run -m backend.seed` reseeds the local SQLite database.
 
 `npm run check` runs every check:
 
 - Python: ruff (lint and format), pyright, and pytest with 80% coverage
 - TypeScript: ESLint, Prettier, tsc, and vitest with 80% coverage
-- Playwright end-to-end tests
+- Playwright end-to-end tests, on their own servers and SQLite database, with a stand-in for the agent's service
+
+The checks need no `.env`: they never reach Supabase, Langfuse or OpenRouter.
 
 The pre-commit hook runs the format, lint, type and unit test checks on every commit.
 
@@ -40,7 +42,8 @@ When the last phase is done, run `npm run check` and report the results.
 
 ## Rules
 
-- Add tests with each change. Tests never call a model; use a stub model.
+- Add tests with each change. Tests never call a model; use a stub model. They never reach the agent's service either; the backend's tests replace its client.
+- For a live run with the real model, reseed first and cap the run at five claims.
 - Where a rule of structure can be checked, check it in a test, as the tests that only `api` modules call the backend do.
 - Outside a plan, commit each change once you have checked it.
 - Run `npm run check` before you hand work over.

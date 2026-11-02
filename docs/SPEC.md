@@ -18,6 +18,10 @@ Each claim is handed to a fresh helper that works that one claim from a clean st
 - work out the payout when it approves
 - explain the decision in two or three sentences, along with the relevant section of the policy
 
+When the helper approves a claim, the system pays it. A payout over the approval limit waits for a handler's sign-off: the helper stops and keeps everything it has worked out, and as soon as a handler signs off on the dashboard, it picks the claim up and pays it. Between the sign-off and the payment the claim shows as in progress, and the payment records who signed off and when.
+
+If the agent is stopped partway through a claim, by a crash, a restart or Ctrl-C, its next run carries on with that claim from where it got to, without counting a new attempt, and pays any claim signed off while it was away, before it starts on the queue. A run that was stopped is finished by the next one.
+
 Our goal is to handle claims straight through, as accurately as our handlers do.
 
 ## What the team needs to see
