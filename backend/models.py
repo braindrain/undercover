@@ -10,6 +10,18 @@ Status = Literal[
 StepKind = Literal["tool_call", "tool_result", "read", "reply", "error"]
 RunStatus = Literal["running", "finished"]
 TodoStatus = Literal["todo", "in_progress", "done", "left_for_handler"]
+Benefit = Literal[
+    "trip_cancellation",
+    "trip_interruption",
+    "trip_delay",
+    "baggage_delay",
+    "baggage",
+    "passport",
+    "emergency_medical",
+]
+LineKind = Literal[
+    "item", "electronics", "cash", "expense", "hotel", "meals_without_receipts"
+]
 
 
 class Item(BaseModel):
@@ -69,6 +81,7 @@ class Claim(BaseModel):
     documents: list[Document]
     status: Status
     failures: int
+    thread_id: str | None
     decision: Decision | None
     payment: Payment | None
     sign_off: SignOff | None
@@ -192,3 +205,29 @@ class NewRun(BaseModel):
 
 class RunSummary(BaseModel):
     summary: str = Field(min_length=1)
+
+
+class Line(BaseModel):
+    description: str = Field(min_length=1)
+    amount: float = Field(ge=0)
+    quantity: int = Field(ge=1)
+    kind: LineKind
+    nights: int = Field(ge=0)
+    hours: float = Field(ge=0)
+
+
+class NewPayout(BaseModel):
+    benefit: Benefit
+    lines: list[Line]
+    paid_by_others: float = Field(ge=0)
+
+
+class PayoutStep(BaseModel):
+    step: str
+    amount: float
+
+
+class Payout(BaseModel):
+    calculation: list[PayoutStep]
+    payout: float
+    needs_sign_off: bool

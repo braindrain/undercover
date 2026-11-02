@@ -53,6 +53,16 @@ def test_start_claim():
     )
 
 
+def test_each_start_is_on_a_new_thread():
+    assert client.get("/api/claims/CLM-1001").json()["thread_id"] is None
+    first = start("CLM-1001").json()["thread_id"]
+    assert first.startswith("CLM-1001-")
+    release("CLM-1001")
+    second = start("CLM-1001").json()["thread_id"]
+    assert second.startswith("CLM-1001-")
+    assert second != first
+
+
 def release(claim_id):
     return client.post(f"/api/claims/{claim_id}/release")
 

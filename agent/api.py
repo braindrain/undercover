@@ -7,6 +7,15 @@ import httpx
 BACKEND_URL = "http://localhost:8000"
 
 Document = Literal["policy_wording", "claims_manual"]
+Benefit = Literal[
+    "trip_cancellation",
+    "trip_interruption",
+    "trip_delay",
+    "baggage_delay",
+    "baggage",
+    "passport",
+    "emergency_medical",
+]
 
 
 class Refused(Exception):
@@ -43,6 +52,13 @@ def get_policy(policy_id: str) -> dict:
     return request("GET", f"/api/policies/{policy_id}").json()
 
 
+def calculate_payout(
+    policy_id: str, benefit: Benefit, lines: list[dict], paid_by_others: float
+) -> dict:
+    body = {"benefit": benefit, "lines": lines, "paid_by_others": paid_by_others}
+    return request("POST", f"/api/policies/{policy_id}/payout", json=body).json()
+
+
 def get_claim_history(customer_id: str) -> list[dict]:
     return request("GET", f"/api/customers/{customer_id}/claims").json()
 
@@ -59,8 +75,8 @@ def get_instructions(name: Literal["queue", "claim"]) -> str:
     return request("GET", f"/api/instructions/{name}").text
 
 
-def start_claim(claim_id: str) -> None:
-    request("POST", f"/api/claims/{claim_id}/start")
+def start_claim(claim_id: str) -> dict:
+    return request("POST", f"/api/claims/{claim_id}/start").json()
 
 
 def release_claim(claim_id: str) -> None:

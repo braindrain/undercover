@@ -7,12 +7,13 @@ from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
+from uuid import uuid4
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
 
 from agent.agents import work_claim
-from backend import db, documents
+from backend import db, documents, payout
 from backend.documents import DocumentName
 from backend.models import (
     Claim,
@@ -22,9 +23,11 @@ from backend.models import (
     Handler,
     NewDecision,
     NewPayment,
+    NewPayout,
     NewRun,
     NewSignOff,
     NewStep,
+    Payout,
     Policy,
     PreviousClaim,
     Run,
@@ -36,9 +39,6 @@ from backend.models import (
 )
 
 INSTRUCTIONS = Path(__file__).parent / "instructions"
-APPROVAL_LIMIT: float = json.loads(db.read_data("company.json"))[
-    "payout_approval_limit"
-]
 MAX_FAILURES = 2
 
 app = FastAPI(title="UnderCover")
@@ -102,6 +102,7 @@ def load_claim(conn: sqlite3.Connection, claim_id: str) -> Claim:
             **json.loads(row["data"]),
             "status": row["status"],
             "failures": row["failures"],
+            "thread_id": row["thread_id"],
             "decision": lookup(conn, "decisions", claim_id),
             "payment": lookup(conn, "payments", claim_id),
             "sign_off": lookup(conn, "sign_offs", claim_id),
@@ -204,6 +205,12 @@ def get_policy(policy_id: str, conn: Database) -> Policy:
     return Policy(**json.loads(find(conn, "policies", policy_id)["data"]))
 
 
+@app.post("/api/policies/{policy_id}/payout", operation_id="work_out_payout")
+def work_out_payout(policy_id: str, claimed: NewPayout, conn: Database) -> Payout:
+    """Work out the payout on an approved claim under a policy, step by step."""
+    return payout.work_out_payout(get_policy(policy_id, conn), claimed)
+
+
 @app.get("/api/customers/{customer_id}", operation_id="get_customer")
 def get_customer(customer_id: str, conn: Database) -> Customer:
     """Return one customer with their contact details and claim history."""
@@ -264,9 +271,12 @@ def list_handlers(conn: Database) -> list[Handler]:
 
 @app.post("/api/claims/{claim_id}/start", operation_id="start_claim")
 def start_claim(claim_id: str, conn: Database) -> Claim:
-    """Move a waiting claim to in progress."""
+    """Move a waiting claim to in progress, on a new thread for the agent's work."""
     require_status(load_claim(conn, claim_id), "waiting", "started")
-    set_status(conn, claim_id, "in_progress")
+    conn.execute(
+        "UPDATE claims SET status = 'in_progress', thread_id = ? WHERE claim_id = ?",
+        (f"{claim_id}-{uuid4().hex[:8]}", claim_id),
+    )
     return load_claim(conn, claim_id)
 
 
@@ -330,7 +340,9 @@ def record_decision(claim_id: str, decision: NewDecision, conn: Database) -> Cla
             now(),
         ),
     )
-    over_limit = decision.decision == "approve" and decision.payout > APPROVAL_LIMIT
+    over_limit = (
+        decision.decision == "approve" and decision.payout > payout.APPROVAL_LIMIT
+    )
     set_status(conn, claim_id, "awaiting_sign_off" if over_limit else "decided")
     return load_claim(conn, claim_id)
 
@@ -343,10 +355,10 @@ def pay_claim(claim_id: str, payment: NewPayment, conn: Database) -> Claim:
         raise HTTPException(409, f"{claim_id} has no approval to pay.")
     if claim.payment:
         raise HTTPException(409, f"{claim_id} has already been paid.")
-    if claim.decision.payout > APPROVAL_LIMIT and claim.sign_off is None:
+    if claim.decision.payout > payout.APPROVAL_LIMIT and claim.sign_off is None:
         raise HTTPException(
             409,
-            f"This payout is over the {money(APPROVAL_LIMIT)} approval limit "
+            f"This payout is over the {money(payout.APPROVAL_LIMIT)} approval limit "
             "and waits for a handler's sign-off.",
         )
     if round(payment.amount, 2) != round(claim.decision.payout, 2):

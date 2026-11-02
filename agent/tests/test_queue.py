@@ -1,6 +1,7 @@
 import runpy
 import sys
 
+import dotenv
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -319,6 +320,7 @@ def command(monkeypatch):
         yield "Worked one claim."
 
     monkeypatch.setattr(agents, "run_queue", run_queue)
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda **kwargs: None)
 
     def run(*args):
         monkeypatch.setattr(sys, "argv", ["agent", *args])

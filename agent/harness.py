@@ -1,11 +1,11 @@
-"""The agents' harness: the model, and the middleware every agent runs inside."""
+"""The agents' harness: the model, the tracing, and the middleware every agent runs
+inside."""
 
 import os
 from collections.abc import Callable
 from typing import Any
 
 import httpx
-from dotenv import load_dotenv
 from langchain.agents.middleware import (
     AgentMiddleware,
     AgentState,
@@ -16,14 +16,15 @@ from langchain.agents.middleware import (
     hook_config,
 )
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
+from langfuse import get_client
+from langfuse.langchain import CallbackHandler
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from pydantic import SecretStr
 
 from agent.api import Refused
-
-load_dotenv(override=True)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
@@ -48,6 +49,28 @@ def model() -> ChatOpenAI:
         timeout=120,
         max_retries=0,
     )
+
+
+def tracing_on() -> bool:
+    """Return whether the Langfuse keys are set."""
+    return bool(os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"))
+
+
+def tracing(session_id: str) -> RunnableConfig:
+    """Return the config that traces a run in Langfuse in the given session, or an
+    empty one when the Langfuse keys aren't set."""
+    if not tracing_on():
+        return {}
+    return {
+        "callbacks": [CallbackHandler()],
+        "metadata": {"langfuse_session_id": session_id},
+    }
+
+
+def flush_traces() -> None:
+    """Send any traces still waiting to Langfuse."""
+    if tracing_on():
+        get_client().flush()
 
 
 class StepRecorder(AgentMiddleware):

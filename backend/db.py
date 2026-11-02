@@ -19,6 +19,7 @@ CREATE TABLE claims (
     claim_id TEXT PRIMARY KEY,
     status TEXT NOT NULL,
     failures INTEGER NOT NULL DEFAULT 0,
+    thread_id TEXT,
     data TEXT NOT NULL
 );
 CREATE TABLE policies (policy_id TEXT PRIMARY KEY, data TEXT NOT NULL);

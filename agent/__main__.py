@@ -7,7 +7,11 @@ uv run -m agent CLM-1001   works one claim
 
 import argparse
 
-from agent import agents, api
+from dotenv import load_dotenv
+
+from agent import agents, api, harness
+
+load_dotenv(override=True)
 
 parser = argparse.ArgumentParser(prog="agent", description="Run the UnderCover Agent.")
 parser.add_argument("claim_id", nargs="?", help="work this one claim")
@@ -21,3 +25,4 @@ else:
     lines = agents.run_queue(cap) if cap else ["No claims are waiting."]
     for line in lines:
         print(line, flush=True)
+harness.flush_traces()

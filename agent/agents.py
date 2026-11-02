@@ -31,10 +31,10 @@ def work_claim(claim_id: str, llm: BaseChatModel | None = None) -> str:
             *harness.middleware(CLAIM_CALL_LIMIT),
         ],
     )
-    api.start_claim(claim_id)
+    thread_id = api.start_claim(claim_id)["thread_id"]
     try:
         task = {"role": "user", "content": f"Decide claim {claim_id}."}
-        result = agent.invoke({"messages": [task]})
+        result = agent.invoke({"messages": [task]}, harness.tracing(thread_id))
         return str(result["messages"][-1].text)
     except Exception as error:
         api.record_step(claim_id, "error", f"The agent stopped: {error}")

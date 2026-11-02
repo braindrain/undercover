@@ -1,4 +1,5 @@
 import itertools
+import json
 import re
 from pathlib import Path
 
@@ -60,6 +61,50 @@ def test_approve_and_pay_after_reading_the_wording():
     assert heading == "Policy wording: 3. Trip Delay"
     assert section == client.get("/api/documents/policy_wording/sections/3").text
     assert recorded[-1]["text"] == "Approved CLM-1001."
+
+
+def test_the_payout_tool_uses_the_backends_rules():
+    lines = [
+        {
+            "description": "Hotel",
+            "amount": 180.0,
+            "quantity": 1,
+            "kind": "expense",
+            "nights": 0,
+            "hours": 0,
+        },
+        {
+            "description": "Meals",
+            "amount": 60.0,
+            "quantity": 1,
+            "kind": "expense",
+            "nights": 0,
+            "hours": 0,
+        },
+    ]
+    model = stub(
+        call(
+            "calculate_payout",
+            policy_id="POL-2001",
+            benefit="trip_delay",
+            lines=lines,
+            paid_by_others=0,
+        ),
+        decision("CLM-1001", "decline", 0),
+        AIMessage(content="Declined."),
+    )
+    agents.work_claim("CLM-1001", model)
+    recorded = steps("CLM-1001")
+    assert recorded[0]["text"].startswith("calculate_payout(policy_id='POL-2001'")
+    assert json.loads(recorded[1]["text"]) == {
+        "calculation": [
+            {"step": "Hotel", "amount": 180.0},
+            {"step": "Meals", "amount": 60.0},
+        ],
+        "payout": 240.0,
+        "needs_sign_off": False,
+    }
+    assert claim("CLM-1001")["status"] == "decided"
 
 
 def test_an_unknown_section_is_a_plain_result():

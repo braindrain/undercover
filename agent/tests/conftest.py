@@ -7,8 +7,12 @@ from backend.main import app
 
 @pytest.fixture(autouse=True)
 def database(tmp_path, monkeypatch):
-    """Give each test a fresh database seeded from data/."""
+    """Give each test a fresh SQLite database seeded from data/, never Supabase,
+    and no tracing."""
+    monkeypatch.setenv("DATABASE_URL", "")
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "undercover.db"))
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "")
 
 
 @pytest.fixture(autouse=True)
