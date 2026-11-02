@@ -44,12 +44,8 @@ def waiting_claims() -> list[dict]:
     return [claim for claim in list_claims() if claim["status"] == "waiting"]
 
 
-def claims_in_progress() -> list[dict]:
-    return [
-        get_claim(claim["claim_id"])
-        for claim in list_claims()
-        if claim["status"] == "in_progress"
-    ]
+def claims_in_progress() -> list[str]:
+    return [c["claim_id"] for c in list_claims() if c["status"] == "in_progress"]
 
 
 def get_claim(claim_id: str) -> dict:

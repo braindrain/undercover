@@ -60,7 +60,7 @@ These nodes take the place of the claim agent's middleware: the step recorder, t
 ### Key choices, and why
 
 1. **The backend owns the thread.** `start_claim` gives the claim a new thread id and returns it with the claim. To carry a claim on, the agent asks the backend for the claims in progress and resumes each one's thread. Nothing else needs to be stored, and the dashboard and Langfuse can name the thread.
-2. **Carrying on is one function, `carry_on(claim)`.** It reads the thread's saved state and picks how to go on: with the handler's sign-off if the thread is waiting at `sign_off` (`Command(resume=...)`), with nothing if it was stopped partway (`invoke(None, ...)`, which LangGraph resumes from the last checkpoint), or from the start of the same thread if it was stopped before its first checkpoint. Every run is invoked with `durability="sync"`, so each step is saved before the next starts.
+2. **Carrying on is one function, `carry_on(claim_id)`.** It reads the thread's saved state and picks how to go on: with the handler's sign-off if the thread is waiting at `sign_off` (`Command(resume=...)`), with nothing if it was stopped partway (`invoke(None, ...)`, which LangGraph resumes from the last checkpoint), or from the start of the same thread if it was stopped before its first checkpoint. Every run is invoked with `durability="sync"`, so each step is saved before the next starts.
 3. **A failure releases the claim, a stop doesn't.** Today `work_claim` releases its claim in a `finally`, which also runs on Ctrl-C. Now it releases only when the claim fails with an error or the graph ends without a decision. Ctrl-C and a killed process leave the claim in progress with its thread saved, so the next run carries it on without counting a new attempt. A claim that fails with an error is released as today, counts a failure, and starts afresh on a new thread.
 4. **Nothing happens twice, by the backend's rules.** A step can run again after a restart. `record_decision` with the same decision and payout as the one recorded returns the claim; a different decision is refused, as today. `pay_claim` with the same amount as the payment recorded returns the claim; a different amount is refused. `release_claim` leaves a claim that has a decision as it is, so a claim whose payment failed waits to be carried on rather than going back in the queue with a decision.
 5. **A run carries on first.** `uv run -m agent` first carries on every claim in progress (stopped, or signed off while the agent was away) and prints a report for each, as the queue agent's reports look. These don't count against the run's cap, since the queue agent didn't hand them out. Then, if the latest queue run is still marked running, it was stopped, so the new run finishes it with a summary saying so. Then it starts its own run.
@@ -157,7 +157,7 @@ service.py ──┘        │                       ▲
 
 - `dashboard/src/api.ts`: the payment's sign-off fields. The sign-off call is unchanged.
 - `dashboard/src/AgentPanels.tsx`: "Sign off" in place of "Sign off and pay"; a signed-off claim in progress says who signed it off and that the agent is paying it; a paid claim says who signed it off and when.
-- `e2e/agent-stand-in.mjs`: new, a stand-in for the agent's service on port 8003. It records each call, and on a carry-on pays the claim through the backend's API as the agent would.
+- `e2e/agent-stand-in.ts`: new, a stand-in for the agent's service on port 8003, run by Node, which strips the types (TypeScript rather than `.mjs`, so the type checker and ESLint cover it with no change to their config). It records each call, and on a carry-on pays the claim through the backend's API as the agent would.
 - `playwright.config.ts`: starts the stand-in, and the backend with `UNDERCOVER_AGENT` pointing at it and `DATABASE_URL` empty.
 
 ### Checked against `docs/CODE_STANDARDS.md`
@@ -239,7 +239,7 @@ Success criteria:
 Rebuild the claim agent as a LangGraph graph with a checkpointer, a wait for the sign-off and a pay step, and have each run carry on first.
 
 - `agent/harness.py`: the checkpointer; the retry policies; turning replies and results into steps; the refusal message. The step recorder middleware goes.
-- `agent/agents.py`: the claim graph; `work_claim(claim_id)`, which starts the claim and runs its thread; `carry_on(claim)`; `run_queue(cap)`, which carries on first and finishes a stopped run.
+- `agent/agents.py`: the claim graph; `work_claim(claim_id)`, which starts the claim and runs its thread; `carry_on(claim_id)`; `run_queue(cap)`, which carries on first and finishes a stopped run.
 - `agent/tools.py`: `pay_claim` goes.
 - `backend/instructions/claim.md`: the changes above.
 - Tests on a stub model with the in-memory checkpointer, which a fixture empties for each test. A "restart" is a new graph on the same checkpointer.
@@ -267,18 +267,18 @@ Start the agent's service with `npm run dev`, have a sign-off reach it, and test
 - `backend/agent_client.py`: `work` and `carry_on`, with the address from `UNDERCOVER_AGENT`.
 - `backend/main.py`: `sign_off_claim` asks the agent to carry on in a background task; `run_agent` asks the agent to work the claim.
 - `package.json`: `dev:agent`, started by `npm run dev` beside the backend and the dashboard.
-- `e2e/agent-stand-in.mjs`, `playwright.config.ts` and `e2e/claim.spec.ts`: the stand-in and the tests.
+- `e2e/agent-stand-in.ts`, `playwright.config.ts` and `e2e/claim.spec.ts`: the stand-in and the tests.
 
 Success criteria:
 
-- [ ] Tests pass for the service: `work_claim` and `carry_on_claim` reply `202` and run the agent's function in the background (replaced in the test); every operation has an `operationId`, a summary and no optional inputs
-- [ ] Tests pass for the sign-off: the backend asks the agent's client to carry the claim on, and the stand-in client sees the sign-off already saved when it's called; with the agent unreachable, the sign-off still succeeds and is saved
-- [ ] Tests pass for `run_agent`: it asks the agent to work a waiting claim and returns `202`; with the agent unreachable it returns `503` and the claim stays waiting; on a claim in progress it returns `409`
-- [ ] Tests check that only `backend/agent_client.py` names the agent's paths or address, and that nothing in `backend/` imports `agent`
-- [ ] `npm run e2e` passes, with new tests that: signing off CLM-1002 on the dashboard reaches the stand-in on port 8003, and the claim then shows paid with the handler and the time; "Run the agent" reaches the stand-in
-- [ ] `npm run e2e` passes a second time in a row, and with `npm run dev` running at the same time
-- [ ] `npm run dev` starts the backend on 8000, the agent's service on 8002 and the dashboard on 5173; `curl -s localhost:8002/health` replies
-- [ ] `npm run check` passes with `.env` moved out of the way
+- [x] Tests pass for the service: `work_claim` and `carry_on_claim` reply `202` and run the agent's function in the background (replaced in the test); every operation has an `operationId`, a summary and no optional inputs
+- [x] Tests pass for the sign-off: the backend asks the agent's client to carry the claim on, and the stand-in client sees the sign-off already saved when it's called; with the agent unreachable, the sign-off still succeeds and is saved
+- [x] Tests pass for `run_agent`: it asks the agent to work a waiting claim and returns `202`; with the agent unreachable it returns `503` and the claim stays waiting; on a claim in progress it returns `409`
+- [x] Tests check that only `backend/agent_client.py` names the agent's paths or address, and that nothing in `backend/` imports `agent`
+- [x] `npm run e2e` passes, with new tests that: signing off CLM-1002 on the dashboard reaches the stand-in on port 8003, and the claim then shows paid with the handler and the time; "Run the agent" reaches the stand-in
+- [x] `npm run e2e` passes a second time in a row, and with `npm run dev` running at the same time
+- [x] `npm run dev` starts the backend on 8000, the agent's service on 8002 and the dashboard on 5173; `curl -s localhost:8002/health` replies
+- [x] `npm run check` passes with `.env` moved out of the way
 
 ## Phase 6: A live run, a restart and the handover
 

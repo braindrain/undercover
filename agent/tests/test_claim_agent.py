@@ -8,7 +8,6 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
-import backend.main
 from agent import agents, api, harness
 from agent.tests.stubs import (
     BrokenModel,
@@ -212,21 +211,6 @@ def test_a_claim_agent_that_never_decides_stops_at_the_call_limit():
     assert len(model.prompts) == agents.CLAIM_CALL_LIMIT
     assert claim("CLM-1001")["status"] == "waiting"
     assert claim("CLM-1001")["failures"] == 1
-
-
-def test_run_agent_starts_a_run(monkeypatch):
-    runs = []
-    monkeypatch.setattr(backend.main, "work_claim", lambda *args: runs.append(args))
-    response = client.post("/api/claims/CLM-1001/run")
-    assert response.status_code == 202
-    assert runs[0][0] == "CLM-1001"
-
-
-def test_run_agent_needs_a_waiting_claim():
-    client.post("/api/claims/CLM-1001/start")
-    response = client.post("/api/claims/CLM-1001/run")
-    assert response.status_code == 409
-    assert response.json()["detail"] == "CLM-1001 is in progress, so it can't be run."
 
 
 def test_the_agent_never_reads_the_data_files():

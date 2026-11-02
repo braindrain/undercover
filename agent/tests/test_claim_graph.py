@@ -66,7 +66,7 @@ def test_an_approval_over_the_limit_waits_for_a_sign_off(payments):
 
 def test_carrying_on_before_the_sign_off_keeps_waiting(payments):
     hold()
-    assert agents.carry_on(claim("CLM-1002")) == (
+    assert agents.carry_on("CLM-1002") == (
         "CLM-1002 is waiting for a handler's sign-off."
     )
     assert payments == []
@@ -77,7 +77,7 @@ def test_a_sign_off_resumes_the_claim_and_pays_it_once(payments):
     sign_off("CLM-1002")
     assert claim("CLM-1002")["status"] == "in_progress"
     model = stub()
-    agents.carry_on(claim("CLM-1002"), model)
+    agents.carry_on("CLM-1002", model)
     assert model.prompts == []
     paid = claim("CLM-1002")
     assert paid["status"] == "decided"
@@ -85,9 +85,7 @@ def test_a_sign_off_resumes_the_claim_and_pays_it_once(payments):
     assert paid["payment"]["signed_off_by"] == "HND-01"
     assert paid["payment"]["signed_off_at"] == paid["sign_off"]["signed_off_at"]
     assert saved("CLM-1002").values["signed_off_by"] == "HND-01"
-    assert agents.carry_on(claim("CLM-1002"), model) == (
-        "CLM-1002 has nothing left to do."
-    )
+    assert agents.carry_on("CLM-1002", model) == ("CLM-1002 has nothing left to do.")
     assert payments == [("CLM-1002", 1150.0)]
 
 
@@ -109,7 +107,7 @@ def test_a_claim_stopped_partway_carries_on_from_its_last_step():
     assert saved("CLM-1001").next == ("agent",)
 
     second = stub(*approve("CLM-1001", 420.0))
-    agents.carry_on(stopped, second)
+    agents.carry_on("CLM-1001", second)
     prompt = second.prompts[0]
     results = [m for m in prompt if isinstance(m, ToolMessage)]
     assert [m.name for m in results] == ["get_claim", "get_policy"]
@@ -125,7 +123,7 @@ def test_a_claim_stopped_partway_carries_on_from_its_last_step():
 def test_a_claim_stopped_before_its_first_step_starts_on_its_thread():
     started = client.post("/api/claims/CLM-1001/start").json()
     model = stub(*approve("CLM-1001", 420.0))
-    agents.carry_on(started, model)
+    agents.carry_on("CLM-1001", model)
     assert [type(m) for m in model.prompts[0][1:]] == [HumanMessage]
     assert claim("CLM-1001")["status"] == "decided"
     assert claim("CLM-1001")["thread_id"] == started["thread_id"]
@@ -169,7 +167,7 @@ def test_the_call_limit_counts_across_a_restart():
         agents.work_claim("CLM-1001", first)
     second = StubModel(messages=get_claim_forever())
     with pytest.raises(harness.CallLimitReached):
-        agents.carry_on(claim("CLM-1001"), second)
+        agents.carry_on("CLM-1001", second)
     assert len(first.prompts) + len(second.prompts) == agents.CLAIM_CALL_LIMIT
     assert claim("CLM-1001")["failures"] == 1
 

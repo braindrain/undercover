@@ -63,7 +63,13 @@ test("an approval under the limit is paid", async ({ page, request }) => {
   await expect(row.getByText("Decided")).toBeVisible();
 });
 
-test("an approval over the limit waits for a handler's sign-off", async ({
+const agentUrl = "http://127.0.0.1:8003";
+
+async function agentCalls(request: APIRequestContext): Promise<string[]> {
+  return (await (await request.get(`${agentUrl}/calls`)).json()) as string[];
+}
+
+test("an approval over the limit waits for a handler's sign-off, which the agent pays", async ({
   page,
   request,
 }) => {
@@ -77,12 +83,24 @@ test("an approval over the limit waits for a handler's sign-off", async ({
   await expect(page.getByText(/Payment blocked/)).toBeVisible();
   await page.getByLabel("Handler").selectOption({ label: "Dana Whitfield" });
   await page.getByRole("button", { name: "Sign off" }).click();
+  await expect
+    .poll(async () => agentCalls(request))
+    .toContain("carry-on CLM-1002");
   await expect(
     page.getByText(
-      /^Signed off by Dana Whitfield on .*\. The agent is paying it\.$/,
+      /^Paid \$1,150\.00 on .+, signed off by Dana Whitfield on .+\.$/,
     ),
-  ).toBeVisible();
-  await expect(page.getByText("In progress", { exact: true })).toBeVisible();
+  ).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText("Decided", { exact: true })).toBeVisible();
+});
+
+test("running the agent on a claim reaches the agent's service", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/#/claims/CLM-1008");
+  await page.getByRole("button", { name: "Run the agent" }).click();
+  await expect.poll(async () => agentCalls(request)).toContain("work CLM-1008");
 });
 
 test("a claim's page lists the sections the agent read", async ({

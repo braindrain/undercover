@@ -167,10 +167,11 @@ def work_claim(claim_id: str, llm: BaseChatModel | None = None) -> str:
     return run_thread(claim, start, llm)
 
 
-def carry_on(claim: dict, llm: BaseChatModel | None = None) -> str:
+def carry_on(claim_id: str, llm: BaseChatModel | None = None) -> str:
     """Carry on a claim in progress from where its thread got to: with the
     handler's sign-off if it was waiting for one, from its last step if it was
     stopped, or from the start if it was stopped before its first step."""
+    claim = api.get_claim(claim_id)
     saved = claim_graph().get_state(harness.thread_config(claim["thread_id"]))
     if saved.next == ("sign_off",):
         if claim["sign_off"] is None:
@@ -189,13 +190,13 @@ def carry_on(claim: dict, llm: BaseChatModel | None = None) -> str:
 def carry_on_stopped(llm: BaseChatModel | None = None) -> Iterator[str]:
     """Carry on every claim in progress, yielding each one's report, then finish
     the latest run if it was stopped while still running."""
-    for claim in api.claims_in_progress():
+    for claim_id in api.claims_in_progress():
         error = None
         try:
-            carry_on(claim, llm)
+            carry_on(claim_id, llm)
         except Exception as failure:
             error = failure
-        yield report(api.get_claim(claim["claim_id"]), error)
+        yield report(api.get_claim(claim_id), error)
     latest = api.get_latest_run()
     if latest and latest["status"] == "running":
         api.finish_run(latest["run_id"], STOPPED_RUN)

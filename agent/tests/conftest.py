@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agent import api, harness
+from backend import agent_client
 from backend.main import app
 
 
@@ -13,6 +14,15 @@ def database(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "undercover.db"))
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "")
+
+
+@pytest.fixture(autouse=True)
+def agent_calls(monkeypatch):
+    """Record each call the backend makes to the agent's service, in place of
+    the service, and return them."""
+    calls: list[str] = []
+    monkeypatch.setattr(agent_client, "request", calls.append)
+    return calls
 
 
 @pytest.fixture(autouse=True)

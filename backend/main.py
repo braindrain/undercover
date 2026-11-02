@@ -1,17 +1,18 @@
 """The UnderCover backend."""
 
+import logging
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
 from uuid import uuid4
 
+import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import Connection, Table, delete, func, insert, select, update
 
-from agent.agents import work_claim
-from backend import db, documents, payout
+from backend import agent_client, db, documents, payout
 from backend.documents import DocumentName
 from backend.models import (
     Claim,
@@ -40,6 +41,7 @@ INSTRUCTIONS = Path(__file__).parent / "instructions"
 MAX_FAILURES = 2
 
 app = FastAPI(title="UnderCover")
+log = logging.getLogger("uvicorn.error")
 
 
 class MarkdownResponse(PlainTextResponse):
@@ -374,7 +376,9 @@ def pay_claim(claim_id: str, payment: NewPayment, conn: Database) -> Claim:
 
 
 @app.post("/api/claims/{claim_id}/sign-off", operation_id="sign_off_claim")
-def sign_off_claim(claim_id: str, sign_off: NewSignOff, conn: Database) -> Claim:
+def sign_off_claim(
+    claim_id: str, sign_off: NewSignOff, background: BackgroundTasks, conn: Database
+) -> Claim:
     """Sign off an approval over the limit, for the agent to pay."""
     require_status(load_claim(conn, claim_id), "awaiting_sign_off", "signed off")
     handler = Handler(**find(conn, db.handlers, sign_off.handler_id)["data"])
@@ -388,15 +392,29 @@ def sign_off_claim(claim_id: str, sign_off: NewSignOff, conn: Database) -> Claim
         )
     )
     update_claim(conn, claim_id, status="in_progress")
+    background.add_task(ask_agent_to_carry_on, claim_id)
     return load_claim(conn, claim_id)
+
+
+def ask_agent_to_carry_on(claim_id: str) -> None:
+    """Ask the agent to pay a claim that was signed off. If it can't be reached,
+    the sign-off stands and the agent's next run carries the claim on."""
+    try:
+        agent_client.carry_on(claim_id)
+    except httpx.HTTPError as error:
+        log.warning("The agent can't carry on %s yet: %s", claim_id, error)
 
 
 @app.post("/api/claims/{claim_id}/run", operation_id="run_agent", status_code=202)
-def run_agent(claim_id: str, background: BackgroundTasks, conn: Database) -> Claim:
-    """Start the agent on a waiting claim, in the background."""
-    require_status(load_claim(conn, claim_id), "waiting", "run")
-    background.add_task(work_claim, claim_id)
-    return load_claim(conn, claim_id)
+def run_agent(claim_id: str, conn: Database) -> Claim:
+    """Ask the agent's service to work a waiting claim, in the background."""
+    claim = load_claim(conn, claim_id)
+    require_status(claim, "waiting", "run")
+    try:
+        agent_client.work(claim_id)
+    except httpx.HTTPError as error:
+        raise HTTPException(503, "The agent's service isn't running.") from error
+    return claim
 
 
 @app.post("/api/runs", operation_id="start_run")
