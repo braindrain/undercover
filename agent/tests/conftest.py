@@ -20,8 +20,10 @@ def database(tmp_path, monkeypatch):
 def agent_calls(monkeypatch):
     """Record each call the backend makes to the agent's service, in place of
     the service, and return them."""
-    calls: list[str] = []
-    monkeypatch.setattr(agent_client, "request", calls.append)
+    calls: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        agent_client, "request", lambda path, body: calls.append((path, body))
+    )
     return calls
 
 

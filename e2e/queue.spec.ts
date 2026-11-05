@@ -10,7 +10,24 @@ test("the queue shows every claim", async ({ page }) => {
   await expect(page.getByRole("row")).toHaveCount(26);
 });
 
-test("the queue shows the latest dispatch and its claims", async ({
+test("starting a dispatch reaches the agent's service with N", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  const run = page.getByRole("region", { name: "The agent's run" });
+  await expect(run.getByLabel("Claim agents at once")).toHaveValue("3");
+  await run.getByLabel("Claim agents at once").selectOption("7");
+  await run.getByRole("button", { name: "Start a dispatch" }).click();
+  await expect
+    .poll(async () => {
+      const calls = await request.get("http://127.0.0.1:8003/calls");
+      return (await calls.json()) as string[];
+    })
+    .toContain("dispatch 7");
+});
+
+test("a dispatch shows its claims, its cost and time, and its summary", async ({
   page,
   request,
 }) => {
@@ -29,10 +46,39 @@ test("the queue shows the latest dispatch and its claims", async ({
   await expect(row.getByText("Waiting")).toBeVisible();
   expect((await request.post("/api/claims/CLM-1020/start")).ok()).toBe(true);
   await expect(row.getByText("In progress")).toBeVisible();
+  await request.post("/api/claims/CLM-1020/model-calls", {
+    data: {
+      run_id: runId,
+      input_tokens: 1000,
+      output_tokens: 100,
+      cost: 0.0125,
+      seconds: 4,
+    },
+  });
+  await request.post("/api/claims/CLM-1020/work", {
+    data: {
+      run_id: runId,
+      started_at: "2026-11-05T10:00:00+00:00",
+      finished_at: "2026-11-05T10:01:12+00:00",
+      seconds: 72,
+    },
+  });
+  await request.post("/api/claims/CLM-1020/decision", {
+    data: {
+      decision: "decline",
+      payout: 0,
+      reasons: "Not covered.",
+      policy_section: "Section 9, General exclusions",
+    },
+  });
   await request.post(`/api/runs/${runId}/finish`, {
     data: { status: "finished" },
   });
   await expect(run.getByText("Finished", { exact: true })).toBeVisible();
+  await expect(run.getByText("$0.0125").first()).toBeVisible();
+  await expect(run.getByText("1m 12s").first()).toBeVisible();
+  const summary = run.getByRole("region", { name: "Summary" });
+  await expect(summary.getByText("Declined")).toBeVisible();
 });
 
 test("a claim that failed twice is left for a handler", async ({

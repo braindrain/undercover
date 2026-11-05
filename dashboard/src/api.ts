@@ -117,6 +117,20 @@ export interface RunClaim {
   status: Status;
   decision: Verdict | null;
   payout: number | null;
+  cost: number;
+  seconds: number;
+  model_seconds: number;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface RunSummary {
+  approved: number;
+  declined: number;
+  referred: number;
+  awaiting_sign_off: { claim_id: string; payout: number }[];
+  left_for_handler: string[];
+  in_progress: string[];
 }
 
 export interface Run {
@@ -128,6 +142,16 @@ export interface Run {
   started_at: string;
   finished_at: string | null;
   claims: RunClaim[];
+  model_cost: number;
+  work_seconds: number;
+  run_seconds: number;
+  summary: RunSummary;
+}
+
+export interface RunOptions {
+  fewest_agents: number;
+  most_agents: number;
+  starting_agents: number;
 }
 
 export const STATUS_LABELS: Record<Status, string> = {
@@ -157,6 +181,24 @@ const money = new Intl.NumberFormat("en-US", {
 
 export function formatMoney(amount: number): string {
   return money.format(amount);
+}
+
+const cost = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 4,
+});
+
+export function formatCost(amount: number): string {
+  return cost.format(amount);
+}
+
+export function formatDuration(seconds: number): string {
+  const whole = Math.round(seconds);
+  const minutes = Math.floor(whole / 60);
+  return minutes
+    ? `${String(minutes)}m ${String(whole % 60)}s`
+    : `${String(whole)}s`;
 }
 
 export function formatTime(iso: string): string {
@@ -198,6 +240,7 @@ export const endpoints = {
     json<Customer>(`/api/customers/${customerId}`),
   handlers: json<Handler[]>("/api/handlers"),
   latestDispatch: json<Run | null>("/api/dispatches/latest"),
+  runOptions: json<RunOptions>("/api/run-options"),
   instructions: text("/api/instructions"),
   document: (name: DocumentName) => text(`/api/documents/${name}`),
 };
@@ -232,6 +275,10 @@ async function post(path: string, body?: object): Promise<void> {
 
 export function runAgent(claimId: string): Promise<void> {
   return post(`/api/claims/${claimId}/run`);
+}
+
+export function startDispatch(agentsAtOnce: number): Promise<void> {
+  return post("/api/dispatches/start", { agents_at_once: agentsAtOnce });
 }
 
 export function signOff(claimId: string, handlerId: string): Promise<void> {

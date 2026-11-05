@@ -439,9 +439,32 @@ select {
 
 .run-claim {
   display: grid;
-  grid-template-columns: 9.5em 1fr;
+  grid-template-columns: 11em 6em minmax(0, 1fr) auto auto;
   align-items: baseline;
   gap: 12px;
+}
+
+.run-claims + section {
+  margin-top: 20px;
+}
+
+.run-form {
+  margin-bottom: 16px;
+}
+
+@media (max-width: 720px) {
+  .run-claim {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+}
+
+.run-held {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .run-claim .chip {

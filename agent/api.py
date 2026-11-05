@@ -133,5 +133,9 @@ def list_run_claims(run_id: str) -> list[str]:
     return request("GET", f"/api/runs/{run_id}/claims").json()
 
 
+def stop_running_runs() -> list[str]:
+    return request("POST", "/api/runs/stop").json()
+
+
 def finish_run(run_id: str, status: Literal["finished", "stopped"]) -> None:
     request("POST", f"/api/runs/{run_id}/finish", json={"status": status})

@@ -1,7 +1,8 @@
 """The UnderCover backend."""
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from functools import partial
 from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
@@ -14,6 +15,9 @@ from sqlalchemy import Connection, insert, select, update
 from backend import agent_client, db, documents, payout, runs
 from backend.documents import DocumentName
 from backend.models import (
+    FEWEST_AGENTS,
+    MOST_AGENTS,
+    STARTING_AGENTS,
     Claim,
     ClaimSummary,
     Contents,
@@ -32,7 +36,10 @@ from backend.models import (
     PreviousClaim,
     Run,
     RunDetails,
+    RunOptions,
     RunResult,
+    StartDispatch,
+    Started,
     Status,
     Step,
 )
@@ -380,6 +387,17 @@ def sign_off_claim(
     return load_claim(conn, claim_id)
 
 
+def ask_agent(call: Callable[[], None]) -> None:
+    """Make a call to the agent's service that a handler is waiting on, passing on
+    its refusal and saying so if it can't be reached."""
+    try:
+        call()
+    except agent_client.Refused as error:
+        raise HTTPException(409, str(error)) from error
+    except httpx.HTTPError as error:
+        raise HTTPException(503, "The agent's service isn't running.") from error
+
+
 def ask_agent_to_carry_on(claim_id: str) -> None:
     """Ask the agent to pay a claim that was signed off. If it can't be reached,
     the sign-off stands and the agent's next run carries the claim on."""
@@ -394,11 +412,25 @@ def run_agent(claim_id: str, conn: Database) -> Claim:
     """Ask the agent's service to work a waiting claim, in the background."""
     claim = load_claim(conn, claim_id)
     require_status(claim, "waiting", "run")
-    try:
-        agent_client.work(claim_id)
-    except httpx.HTTPError as error:
-        raise HTTPException(503, "The agent's service isn't running.") from error
+    ask_agent(partial(agent_client.work, claim_id))
     return claim
+
+
+@app.get("/api/run-options", operation_id="get_run_options")
+def get_run_options() -> RunOptions:
+    """Return the fewest, the most and the starting number of agents at once."""
+    return RunOptions(
+        fewest_agents=FEWEST_AGENTS,
+        most_agents=MOST_AGENTS,
+        starting_agents=STARTING_AGENTS,
+    )
+
+
+@app.post("/api/dispatches/start", operation_id="start_dispatch", status_code=202)
+def start_dispatch(start: StartDispatch) -> Started:
+    """Ask the agent's service to start a dispatch, writing nothing here first."""
+    ask_agent(partial(agent_client.start_dispatch, start.agents_at_once))
+    return Started(status="accepted")
 
 
 @app.post("/api/dispatches", operation_id="create_dispatch")

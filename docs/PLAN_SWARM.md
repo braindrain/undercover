@@ -338,21 +338,21 @@ Let a handler start a dispatch and see it through, with the summary, the cost an
 
 Success criteria:
 
-- [ ] Tests pass for the service: a start replies `202` at once, before the run is created; a second start replies `409` while the first is working; the slot is free again after a run finishes and after one fails
-- [ ] Tests pass for the service's start: it marks any running dispatch as stopped; it keeps trying while the backend can't be reached; and it fails with a clear error when the backend never comes
-- [ ] A failure inside the background thread marks the run as `stopped`, not `running`
-- [ ] Tests pass for the backend: `start_dispatch` passes N to the service and writes nothing to the database; with a stand-in that refuses, it returns `409` with the service's reason; with the service unreachable, `503` with "The agent's service isn't running."; N of 0 or 26 returns `422`
-- [ ] The existing tests for `run_agent` and the sign-off pass on the shared path
-- [ ] A test builds the summary from a run's records, with claims approved, declined and referred, one held at a payout, one left for a handler and one in progress, and checks each count and list
-- [ ] A test checks a run's totals are its own: two runs and a claim worked with no run, with the failed attempt's cost included in its run
-- [ ] A test counts the queries `get_latest_dispatch` makes: the same with 25 claims as with 2
-- [ ] The test on the service's API rules passes with the new operations, now that some have a body
-- [ ] Structure tests: the claim agent's tools are the same seven; `dashboard/` names no address but the backend's; `signal`, `os.fork` and async Postgres appear nowhere in `agent/`. Windows is covered by these and by `package.json` being unchanged, since this build can't be run on Windows here
-- [ ] Vitest tests pass for the form (N offered from the options, starting at 3), a refusal and a stopped service showing as alerts, a running dispatch, a finished one with its summary, and a stopped one
-- [ ] `npm run e2e` passes, with a test that choosing 7 and starting a dispatch reaches the stand-in as `dispatch 7`
-- [ ] `npm run e2e` passes a second time in a row, and with `npm run dev` running at the same time
-- [ ] In the browser with the Playwright MCP server, on the end-to-end servers: the form, a dispatch played out through the API and its summary match the brand in light and dark mode, and the console shows no errors
-- [ ] `npm run check` passes with coverage at or above 80%
+- [x] Tests pass for the service: a start replies `202` at once, before the run is created; a second start replies `409` while the first is working; the slot is free again after a run finishes and after one fails
+- [x] Tests pass for the service's start: it marks any running dispatch as stopped; it keeps trying while the backend can't be reached; and it fails with a clear error when the backend never comes
+- [x] A failure inside the background thread marks the run as `stopped`, not `running`
+- [x] Tests pass for the backend: `start_dispatch` passes N to the service and writes nothing to the database; with a stand-in that refuses, it returns `409` with the service's reason; with the service unreachable, `503` with "The agent's service isn't running."; N of 0 or 26 returns `422`
+- [x] The existing tests for `run_agent` and the sign-off pass on the shared path
+- [x] A test builds the summary from a run's records, with claims approved, declined and referred, one held at a payout, one left for a handler and one in progress, and checks each count and list
+- [x] A test checks a run's totals are its own: two runs and a claim worked with no run, with the failed attempt's cost included in its run
+- [x] A test counts the queries `get_latest_dispatch` makes: the same with 25 claims as with 2
+- [x] The test on the service's API rules passes with the new operations, now that some have a body
+- [x] Structure tests: the claim agent's tools are the same seven; `dashboard/` names no address but the backend's; `signal`, `os.fork` and async Postgres appear nowhere in `agent/`. Windows is covered by these and by `package.json` being unchanged, since this build can't be run on Windows here
+- [x] Vitest tests pass for the form (N offered from the options, starting at 3), a refusal and a stopped service showing as alerts, a running dispatch, a finished one with its summary, and a stopped one
+- [x] `npm run e2e` passes, with a test that choosing 7 and starting a dispatch reaches the stand-in as `dispatch 7`
+- [x] `npm run e2e` passes a second time in a row, and with `npm run dev` running at the same time
+- [x] In the browser with the Playwright MCP server, on the end-to-end servers: the form, a dispatch played out through the API and its summary match the brand in light and dark mode, and the console shows no errors
+- [x] `npm run check` passes with coverage at or above 80%
 
 ## Phase 4: The evaluations
 

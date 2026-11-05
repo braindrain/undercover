@@ -1,14 +1,32 @@
-"""A run's records: creating a dispatch, loading a run with its claims, and ending
-one. A run is a dispatch or an evaluation."""
+"""A run's records: creating a dispatch, loading a run with its claims, totals and
+summary, and ending one. A run is a dispatch or an evaluation."""
 
+from datetime import datetime
 from uuid import uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import Connection, insert, select, update
+from sqlalchemy import Connection, func, insert, select, update
 
 from backend import db
-from backend.models import NewDispatch, Run, RunClaim, RunDetails, RunEnd, RunKind
+from backend.models import (
+    HeldPayout,
+    NewDispatch,
+    Run,
+    RunClaim,
+    RunDetails,
+    RunEnd,
+    RunKind,
+    RunSummary,
+)
 from backend.records import find, now
+
+NO_TOTALS = {
+    "cost": 0.0,
+    "model_seconds": 0.0,
+    "seconds": 0.0,
+    "started_at": None,
+    "finished_at": None,
+}
 
 
 def create_run(
@@ -55,8 +73,40 @@ def claim_ids(conn: Connection, run_id: str) -> list[str]:
     )
 
 
+def model_totals(conn: Connection, run_id: str) -> dict[str, dict]:
+    """Return each claim's model cost and seconds in this run, by claim."""
+    rows = conn.execute(
+        select(
+            db.model_calls.c.claim_id,
+            func.sum(db.model_calls.c.cost).label("cost"),
+            func.sum(db.model_calls.c.seconds).label("model_seconds"),
+        )
+        .where(db.model_calls.c.run_id == run_id)
+        .group_by(db.model_calls.c.claim_id)
+    ).mappings()
+    return {row["claim_id"]: dict(row) for row in rows}
+
+
+def work_totals(conn: Connection, run_id: str) -> dict[str, dict]:
+    """Return each claim's seconds of work in this run, with its first start and
+    last finish, by claim."""
+    rows = conn.execute(
+        select(
+            db.work_times.c.claim_id,
+            func.sum(db.work_times.c.seconds).label("seconds"),
+            func.min(db.work_times.c.started_at).label("started_at"),
+            func.max(db.work_times.c.finished_at).label("finished_at"),
+        )
+        .where(db.work_times.c.run_id == run_id)
+        .group_by(db.work_times.c.claim_id)
+    ).mappings()
+    return {row["claim_id"]: dict(row) for row in rows}
+
+
 def load_claims(conn: Connection, run_id: str) -> list[RunClaim]:
-    """Return a run's claims in order, with where each one stands."""
+    """Return a run's claims in order, with where each one stands and what it took
+    in this run. The number of queries doesn't grow with the claims, because the
+    run panel polls this on the same connections as the claim agents."""
     rows = conn.execute(
         select(
             db.claims.c.claim_id,
@@ -70,22 +120,69 @@ def load_claims(conn: Connection, run_id: str) -> list[RunClaim]:
         .where(db.run_claims.c.run_id == run_id)
         .order_by(db.run_claims.c.position)
     ).mappings()
+    calls = model_totals(conn, run_id)
+    work = work_totals(conn, run_id)
     return [
         RunClaim(
-            claim_id=row["claim_id"],
             summary=row["data"]["summary"],
             status=row["status"],
             decision=row["decision"],
             payout=row["payout"],
+            **(
+                NO_TOTALS
+                | {"claim_id": row["claim_id"]}
+                | calls.get(row["claim_id"], {})
+                | work.get(row["claim_id"], {})
+            ),
         )
         for row in rows
     ]
 
 
+def summarize(claims: list[RunClaim]) -> RunSummary:
+    """Build a run's summary from its claims as they stand now, so that a payout
+    signed off after the run no longer shows as waiting."""
+    decisions = [claim.decision for claim in claims]
+
+    def with_status(status: str) -> list[RunClaim]:
+        return [claim for claim in claims if claim.status == status]
+
+    return RunSummary(
+        approved=decisions.count("approve"),
+        declined=decisions.count("decline"),
+        referred=decisions.count("refer"),
+        awaiting_sign_off=[
+            HeldPayout(claim_id=claim.claim_id, payout=claim.payout or 0.0)
+            for claim in with_status("awaiting_sign_off")
+        ],
+        left_for_handler=[c.claim_id for c in with_status("left_for_handler")],
+        in_progress=[c.claim_id for c in with_status("in_progress")],
+    )
+
+
+def run_seconds(claims: list[RunClaim]) -> float:
+    """Return the time from the run's first start to its last finish, from the
+    work recorded so far."""
+    starts = [claim.started_at for claim in claims if claim.started_at]
+    finishes = [claim.finished_at for claim in claims if claim.finished_at]
+    if not starts:
+        return 0.0
+    first, last = min(starts), max(finishes)
+    elapsed = datetime.fromisoformat(last) - datetime.fromisoformat(first)
+    return elapsed.total_seconds()
+
+
 def load_run(conn: Connection, run_id: str) -> RunDetails:
-    """Return a run with its claims."""
-    run = find(conn, db.runs, run_id)
-    return RunDetails(**run, claims=load_claims(conn, run_id))
+    """Return a run with its claims, its totals and its summary."""
+    claims = load_claims(conn, run_id)
+    return RunDetails(
+        **find(conn, db.runs, run_id),
+        claims=claims,
+        model_cost=sum(claim.cost for claim in claims),
+        work_seconds=sum(claim.seconds for claim in claims),
+        run_seconds=run_seconds(claims),
+        summary=summarize(claims),
+    )
 
 
 def latest_dispatch(conn: Connection) -> RunDetails | None:

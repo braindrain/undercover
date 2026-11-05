@@ -1,7 +1,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { QueuePage } from "./QueuePage";
-import { stubFetch, summary } from "./testing";
+import { options, stubFetch, summary } from "./testing";
 
 afterEach(() => {
   cleanup();
@@ -21,7 +21,11 @@ const claims = [
   }),
 ];
 
-const routes = { "/api/claims": claims, "/api/dispatches/latest": null };
+const routes = {
+  "/api/claims": claims,
+  "/api/dispatches/latest": null,
+  "/api/run-options": options,
+};
 
 it("counts the claims in each state", async () => {
   stubFetch(routes);

@@ -1,7 +1,13 @@
 import { vi } from "vitest";
-import type { ClaimSummary } from "./api";
+import type { ClaimSummary, RunOptions } from "./api";
 
 export type Routes = Record<string, unknown>;
+
+export const options: RunOptions = {
+  fewest_agents: 1,
+  most_agents: 25,
+  starting_agents: 3,
+};
 
 export function stubFetch(routes: Routes) {
   const fetchMock = vi.fn<

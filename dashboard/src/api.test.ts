@@ -1,5 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { formatLabel, formatMoney, signOff } from "./api";
+import {
+  formatCost,
+  formatDuration,
+  formatLabel,
+  formatMoney,
+  signOff,
+  startDispatch,
+} from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -8,6 +15,17 @@ afterEach(() => {
 it("formats money in US dollars", () => {
   expect(formatMoney(1250)).toBe("$1,250.00");
   expect(formatMoney(0)).toBe("$0.00");
+});
+
+it("formats model cost to a hundredth of a cent", () => {
+  expect(formatCost(0.0123)).toBe("$0.0123");
+  expect(formatCost(1.5)).toBe("$1.5000");
+});
+
+it("formats a duration", () => {
+  expect(formatDuration(8.4)).toBe("8s");
+  expect(formatDuration(72)).toBe("1m 12s");
+  expect(formatDuration(0)).toBe("0s");
 });
 
 it("formats labels", () => {
@@ -22,6 +40,17 @@ it("posts JSON", async () => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: '{"handler_id":"HND-002"}',
+  });
+});
+
+it("starts a dispatch with N", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response("{}"));
+  vi.stubGlobal("fetch", fetchMock);
+  await startDispatch(7);
+  expect(fetchMock).toHaveBeenCalledWith("/api/dispatches/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: '{"agents_at_once":7}',
   });
 });
 

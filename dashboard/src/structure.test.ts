@@ -13,3 +13,16 @@ it("calls the backend's API only from api.ts", () => {
       /["'`]\/api\//,
     );
 });
+
+it("reaches the agent's service only through the backend", () => {
+  const folder = import.meta.dirname;
+  const sources = readdirSync(folder).filter(
+    (name) => /\.tsx?$/.test(name) && !name.includes(".test."),
+  );
+  for (const name of sources)
+    expect(readFileSync(join(folder, name), "utf8"), name).not.toMatch(
+      /https?:\/\/|:8002/,
+    );
+  const config = readFileSync(join(folder, "..", "vite.config.ts"), "utf8");
+  expect(config).not.toContain(":8002");
+});

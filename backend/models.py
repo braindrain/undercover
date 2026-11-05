@@ -1,6 +1,6 @@
 """The shapes of the records the API sends and receives."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,9 @@ LineKind = Literal[
 
 FEWEST_AGENTS = 1
 MOST_AGENTS = 25
+STARTING_AGENTS = 3
+
+AgentsAtOnce = Annotated[int, Field(ge=FEWEST_AGENTS, le=MOST_AGENTS)]
 
 
 class Item(BaseModel):
@@ -220,14 +223,51 @@ class RunClaim(BaseModel):
     status: Status
     decision: str | None
     payout: float | None
+    cost: float
+    seconds: float
+    model_seconds: float
+    started_at: str | None
+    finished_at: str | None
+
+
+class HeldPayout(BaseModel):
+    claim_id: str
+    payout: float
+
+
+class RunSummary(BaseModel):
+    approved: int
+    declined: int
+    referred: int
+    awaiting_sign_off: list[HeldPayout]
+    left_for_handler: list[str]
+    in_progress: list[str]
 
 
 class RunDetails(Run):
     claims: list[RunClaim]
+    model_cost: float
+    work_seconds: float
+    run_seconds: float
+    summary: RunSummary
+
+
+class RunOptions(BaseModel):
+    fewest_agents: int
+    most_agents: int
+    starting_agents: int
+
+
+class StartDispatch(BaseModel):
+    agents_at_once: AgentsAtOnce
+
+
+class Started(BaseModel):
+    status: str
 
 
 class NewDispatch(BaseModel):
-    agents_at_once: int = Field(ge=FEWEST_AGENTS, le=MOST_AGENTS)
+    agents_at_once: AgentsAtOnce
     model: str = Field(min_length=1)
     reasoning_effort: str = Field(min_length=1)
 

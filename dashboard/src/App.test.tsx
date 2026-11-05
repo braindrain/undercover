@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { parseRoute } from "./hooks";
-import { stubFetch, summary } from "./testing";
+import { options, stubFetch, summary } from "./testing";
 
 afterEach(() => {
   cleanup();
@@ -24,6 +24,7 @@ it("shows the queue by default", async () => {
   stubFetch({
     "/api/claims": [summary({})],
     "/api/dispatches/latest": null,
+    "/api/run-options": options,
   });
   render(<App />);
   expect(
