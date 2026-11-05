@@ -159,6 +159,57 @@ export interface RunOptions {
   starting_agents: number;
 }
 
+export type ClaimSet = "evaluation" | "held_out";
+
+export interface Measures {
+  decision_accuracy: number;
+  accuracy: number;
+  cost_of_mistakes: number;
+  straight_through_rate: number;
+  cost_per_claim: number;
+  seconds_per_claim: number;
+  run_seconds: number;
+}
+
+export interface Evaluation {
+  run_id: string;
+  agents_at_once: number;
+  claim_set: ClaimSet;
+  tiny: boolean;
+  model: string;
+  reasoning_effort: string;
+  status: RunStatus;
+  started_at: string;
+  finished_at: string | null;
+  claim_count: number;
+  measures: Measures;
+}
+
+export interface EvaluationClaim {
+  claim_id: string;
+  source_claim_id: string;
+  summary: string;
+  status: Status;
+  handler_decision: Verdict;
+  handler_payout: number;
+  agent_decision: Verdict | null;
+  agent_payout: number | null;
+  reason: string | null;
+  cost: number;
+  seconds: number;
+  mistake_cost: number;
+  miss: boolean;
+}
+
+export interface EvaluationDetails extends Evaluation {
+  claims: EvaluationClaim[];
+}
+
+export const CLAIM_SET_LABELS: Record<ClaimSet, string> = {
+  evaluation: "Evaluation set",
+  held_out: "Held-out set",
+};
+
 export const STATUS_LABELS: Record<Status, string> = {
   waiting: "Waiting",
   in_progress: "In progress",
@@ -196,6 +247,10 @@ const cost = new Intl.NumberFormat("en-US", {
 
 export function formatCost(amount: number): string {
   return cost.format(amount);
+}
+
+export function formatPercent(share: number): string {
+  return `${(share * 100).toFixed(1)}%`;
 }
 
 export function formatDuration(seconds: number): string {
@@ -248,6 +303,9 @@ export const endpoints = {
   handlers: json<Handler[]>("/api/handlers"),
   latestDispatch: json<Run | null>("/api/dispatches/latest"),
   runOptions: json<RunOptions>("/api/run-options"),
+  evaluations: json<Evaluation[]>("/api/evaluations"),
+  evaluation: (runId: string) =>
+    json<EvaluationDetails>(`/api/evaluations/${runId}`),
   instructions: text("/api/instructions"),
   document: (name: DocumentName) => text(`/api/documents/${name}`),
 };
@@ -286,6 +344,18 @@ export function runAgent(claimId: string): Promise<void> {
 
 export function startDispatch(agentsAtOnce: number): Promise<void> {
   return post("/api/dispatches/start", { agents_at_once: agentsAtOnce });
+}
+
+export function startEvaluation(
+  agentsAtOnce: number,
+  claimSet: ClaimSet,
+  tiny: boolean,
+): Promise<void> {
+  return post("/api/evaluations/start", {
+    agents_at_once: agentsAtOnce,
+    claim_set: claimSet,
+    tiny,
+  });
 }
 
 export function signOff(claimId: string, handlerId: string): Promise<void> {

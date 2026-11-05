@@ -177,16 +177,18 @@ def summarize(claims: list[RunClaim]) -> RunSummary:
     )
 
 
+def elapsed(first: str, last: str) -> float:
+    """Return the seconds between two times."""
+    gap = datetime.fromisoformat(last) - datetime.fromisoformat(first)
+    return gap.total_seconds()
+
+
 def run_seconds(claims: list[RunClaim]) -> float:
     """Return the time from the run's first start to its last finish, from the
     work recorded so far."""
     starts = [claim.started_at for claim in claims if claim.started_at]
     finishes = [claim.finished_at for claim in claims if claim.finished_at]
-    if not starts:
-        return 0.0
-    first, last = min(starts), max(finishes)
-    elapsed = datetime.fromisoformat(last) - datetime.fromisoformat(first)
-    return elapsed.total_seconds()
+    return elapsed(min(starts), max(finishes)) if starts else 0.0
 
 
 def load_run(conn: Connection, run_id: str) -> RunDetails:

@@ -18,6 +18,11 @@ it("parses routes", () => {
     page: "claim",
     claimId: "CLM-1001",
   });
+  expect(parseRoute("#/scoreboard")).toEqual({ page: "scoreboard" });
+  expect(parseRoute("#/scoreboard/evaluation-3f9a2c1d")).toEqual({
+    page: "evaluation",
+    runId: "evaluation-3f9a2c1d",
+  });
 });
 
 it("shows the queue by default", async () => {
@@ -32,6 +37,34 @@ it("shows the queue by default", async () => {
   ).toBeDefined();
   expect(
     screen.getByRole("link", { name: "Queue" }).getAttribute("aria-current"),
+  ).toBe("page");
+});
+
+it("follows the hash to the scoreboard", async () => {
+  stubFetch({ "/api/evaluations": [], "/api/run-options": options });
+  window.location.hash = "#/scoreboard";
+  render(<App />);
+  expect(
+    await screen.findByRole("heading", { name: "Scoreboard" }),
+  ).toBeDefined();
+  expect(
+    screen
+      .getByRole("link", { name: "Scoreboard" })
+      .getAttribute("aria-current"),
+  ).toBe("page");
+});
+
+it("follows the hash to an evaluation", async () => {
+  stubFetch({});
+  window.location.hash = "#/scoreboard/evaluation-3f9a2c1d";
+  render(<App />);
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    "No route /api/evaluations/evaluation-3f9a2c1d",
+  );
+  expect(
+    screen
+      .getByRole("link", { name: "Scoreboard" })
+      .getAttribute("aria-current"),
   ).toBe("page");
 });
 

@@ -392,17 +392,17 @@ Score each evaluation and show it on a new page.
 
 Success criteria:
 
-- [ ] Tests pass for each mistake on its own, including a wrongful approval that was never paid, an agent's decline where the handler referred, and a payout exactly a dollar away counting as accurate
-- [ ] The six claims worked out by hand above give `decision_accuracy` 0.5, `accuracy` 2/6, a cost of mistakes of $1,950.50 and a straight-through rate of 4/6
-- [ ] Cost per claim, time per claim and whole-run time match figures worked out by hand from a set of `model_calls` and `work_times` rows, with a failed attempt's cost included
-- [ ] A claim with no decision counts as a referral in every measure
-- [ ] `list_evaluations` is newest first, with the same number of queries for 2 evaluations as for 10; a stopped evaluation shows as stopped with measures from what it did
-- [ ] `get_evaluation` has each claim's handler and agent decision, payout, reason, cost, time and a miss flag, in the set's order; an unknown id returns `404`
-- [ ] Vitest tests pass for the form, the list, an evaluation's page with its misses marked and its claims linked, and the routes
-- [ ] `npm run e2e` passes, with tests that starting an evaluation on the page reaches the stand-in as `evaluation 5 held_out tiny`, and that an evaluation played out through the API shows on the scoreboard with its measures, opens to its claims with a miss marked, and links to a copy's page
-- [ ] `npm run e2e` passes a second time in a row, and with `npm run dev` running at the same time
-- [ ] In the browser with the Playwright MCP server, on the end-to-end servers: both pages match the brand in light and dark mode, with no edge borders, and the console shows no errors
-- [ ] `npm run check` passes with coverage at or above 80%
+- [x] Tests pass for each mistake on its own, including a wrongful approval that was never paid, an agent's decline where the handler referred, and a payout exactly a dollar away counting as accurate
+- [x] The six claims worked out by hand above give `decision_accuracy` 0.5, `accuracy` 2/6, a cost of mistakes of $1,950.50 and a straight-through rate of 4/6
+- [x] Cost per claim, time per claim and whole-run time match figures worked out by hand from a set of `model_calls` and `work_times` rows, with a failed attempt's cost included
+- [x] A claim with no decision counts as a referral in every measure
+- [x] `list_evaluations` is newest first, with the same number of queries for 2 evaluations as for 10; a stopped evaluation shows as stopped with measures from what it did
+- [x] `get_evaluation` has each claim's handler and agent decision, payout, reason, cost, time and a miss flag, in the set's order; an unknown id returns `404`
+- [x] Vitest tests pass for the form, the list, an evaluation's page with its misses marked and its claims linked, and the routes
+- [x] `npm run e2e` passes, with tests that starting an evaluation on the page reaches the stand-in as `evaluation 5 held_out tiny`, and that an evaluation played out through the API shows on the scoreboard with its measures, opens to its claims with a miss marked, and links to a copy's page
+- [x] `npm run e2e` passes a second time in a row, and with `npm run dev` running at the same time
+- [x] In the browser with the Playwright MCP server, on the end-to-end servers: both pages match the brand in light and dark mode, with no edge borders, and the console shows no errors
+- [x] `npm run check` passes with coverage at or above 80%
 
 ## Phase 6: The live runs and the handover
 

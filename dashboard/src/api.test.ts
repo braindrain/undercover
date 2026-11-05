@@ -4,8 +4,10 @@ import {
   formatDuration,
   formatLabel,
   formatMoney,
+  formatPercent,
   signOff,
   startDispatch,
+  startEvaluation,
 } from "./api";
 
 afterEach(() => {
@@ -26,6 +28,11 @@ it("formats a duration", () => {
   expect(formatDuration(8.4)).toBe("8s");
   expect(formatDuration(72)).toBe("1m 12s");
   expect(formatDuration(0)).toBe("0s");
+});
+
+it("formats a share as a percentage", () => {
+  expect(formatPercent(0.5)).toBe("50.0%");
+  expect(formatPercent(2 / 3)).toBe("66.7%");
 });
 
 it("formats labels", () => {
@@ -51,6 +58,17 @@ it("starts a dispatch with N", async () => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: '{"agents_at_once":7}',
+  });
+});
+
+it("starts an evaluation with its settings", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response("{}"));
+  vi.stubGlobal("fetch", fetchMock);
+  await startEvaluation(5, "held_out", true);
+  expect(fetchMock).toHaveBeenCalledWith("/api/evaluations/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: '{"agents_at_once":5,"claim_set":"held_out","tiny":true}',
   });
 });
 

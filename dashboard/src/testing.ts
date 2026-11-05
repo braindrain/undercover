@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { ClaimSummary, RunOptions } from "./api";
+import type { ClaimSummary, Evaluation, RunOptions } from "./api";
 
 export type Routes = Record<string, unknown>;
 
@@ -41,6 +41,31 @@ export function summary(changes: Partial<ClaimSummary>): ClaimSummary {
     status: "waiting",
     decision: null,
     payout: null,
+    ...changes,
+  };
+}
+
+export function evaluation(changes: Partial<Evaluation>): Evaluation {
+  return {
+    run_id: "evaluation-3f9a2c1d",
+    agents_at_once: 5,
+    claim_set: "held_out",
+    tiny: true,
+    model: "openai/gpt-6-luna",
+    reasoning_effort: "low",
+    status: "finished",
+    started_at: "2026-11-05T10:00:00+00:00",
+    finished_at: "2026-11-05T10:02:00+00:00",
+    claim_count: 5,
+    measures: {
+      decision_accuracy: 0.8,
+      accuracy: 0.6,
+      cost_of_mistakes: 1550,
+      straight_through_rate: 0.75,
+      cost_per_claim: 0.0123,
+      seconds_per_claim: 72,
+      run_seconds: 95,
+    },
     ...changes,
   };
 }

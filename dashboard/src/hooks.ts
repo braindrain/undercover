@@ -4,12 +4,16 @@ import { errorMessage, load, type Endpoint } from "./api";
 export type Route =
   | { page: "queue" }
   | { page: "claim"; claimId: string }
-  | { page: "instructions" };
+  | { page: "instructions" }
+  | { page: "scoreboard" }
+  | { page: "evaluation"; runId: string };
 
 export function parseRoute(hash: string): Route {
   const [, page, id] = hash.replace(/^#/, "").split("/");
   if (page === "claims" && id) return { page: "claim", claimId: id };
   if (page === "instructions") return { page: "instructions" };
+  if (page === "scoreboard" && id) return { page: "evaluation", runId: id };
+  if (page === "scoreboard") return { page: "scoreboard" };
   return { page: "queue" };
 }
 

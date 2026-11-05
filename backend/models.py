@@ -284,6 +284,41 @@ class NewEvaluation(NewDispatch):
     tiny: bool
 
 
+class Measures(BaseModel):
+    decision_accuracy: float
+    accuracy: float
+    cost_of_mistakes: float
+    straight_through_rate: float
+    cost_per_claim: float
+    seconds_per_claim: float
+    run_seconds: float
+
+
+class Evaluation(Run):
+    claim_count: int
+    measures: Measures
+
+
+class EvaluationClaim(BaseModel):
+    claim_id: str
+    source_claim_id: str
+    summary: str
+    status: Status
+    handler_decision: str
+    handler_payout: float
+    agent_decision: str | None
+    agent_payout: float | None
+    reason: str | None
+    cost: float
+    seconds: float
+    mistake_cost: float
+    miss: bool
+
+
+class EvaluationDetails(Evaluation):
+    claims: list[EvaluationClaim]
+
+
 class ClaimEvaluation(BaseModel):
     evaluation_id: str
     source_claim_id: str

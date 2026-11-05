@@ -14,6 +14,8 @@ interface Claim {
 
 interface NewRun {
   agents_at_once: number;
+  claim_set: string;
+  tiny: boolean;
 }
 
 async function pay(claimId: string): Promise<void> {
@@ -49,6 +51,14 @@ createServer((request, response) => {
   } else if (request.method === "POST" && url === "/dispatches") {
     void readBody(request).then((body) => {
       calls.push(`dispatch ${String(body.agents_at_once)}`);
+      response.writeHead(202).end();
+    });
+  } else if (request.method === "POST" && url === "/evaluations") {
+    void readBody(request).then((body) => {
+      const size = body.tiny ? "tiny" : "whole";
+      calls.push(
+        `evaluation ${String(body.agents_at_once)} ${body.claim_set} ${size}`,
+      );
       response.writeHead(202).end();
     });
   } else {

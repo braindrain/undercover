@@ -23,6 +23,8 @@ from backend.models import (
     ClaimSummary,
     Contents,
     Customer,
+    Evaluation,
+    EvaluationDetails,
     Handler,
     NewDecision,
     NewDispatch,
@@ -482,6 +484,18 @@ def start_evaluation(start: StartEvaluation) -> Started:
 def create_evaluation(new_evaluation: NewEvaluation, conn: Database) -> Run:
     """Record an evaluation and make its copies, for the agent's service."""
     return evaluations.create_evaluation(conn, new_evaluation)
+
+
+@app.get("/api/evaluations", operation_id="list_evaluations")
+def list_evaluations(conn: Database) -> list[Evaluation]:
+    """List the evaluations, newest first, with every measure."""
+    return evaluations.list_evaluations(conn)
+
+
+@app.get("/api/evaluations/{run_id}", operation_id="get_evaluation")
+def get_evaluation(run_id: str, conn: Database) -> EvaluationDetails:
+    """Return an evaluation's measures, with each claim beside the handler's."""
+    return evaluations.get_evaluation(conn, run_id)
 
 
 @app.get("/api/dispatches/latest", operation_id="get_latest_dispatch")
