@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { agentCalls } from "./agent-calls";
 
 // These tests stand in for the model: they drive each claim through the API.
 
@@ -62,12 +63,6 @@ test("an approval under the limit is paid", async ({ page, request }) => {
   const row = page.getByRole("row").filter({ hasText: "CLM-1004" });
   await expect(row.getByText("Decided")).toBeVisible();
 });
-
-const agentUrl = "http://127.0.0.1:8003";
-
-async function agentCalls(request: APIRequestContext): Promise<string[]> {
-  return (await (await request.get(`${agentUrl}/calls`)).json()) as string[];
-}
 
 test("an approval over the limit waits for a handler's sign-off, which the agent pays", async ({
   page,

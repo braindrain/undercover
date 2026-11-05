@@ -43,7 +43,7 @@ When the last phase is done, run `npm run check` and report the results.
 ## Rules
 
 - Add tests with each change. Tests never call a model; use a stub model. They never reach the agent's service either; the backend's tests replace its client.
-- For a live run with the real model, reseed first and cap the run at five claims.
+- For a live run with the real model, reseed first and keep to the runs the brief asks for. A dispatch works the whole queue, and an evaluation a whole set or its five `tiny` claims.
 - Where a rule of structure can be checked, check it in a test, as the tests that only `api` modules call the backend do.
 - Outside a plan, commit each change once you have checked it.
 - Run `npm run check` before you hand work over.
@@ -51,5 +51,5 @@ When the last phase is done, run `npm run check` and report the results.
 - Never lower a threshold, turn off a rule or exclude a file to get a green run, and that includes `noqa` and the like on one line. If a rule looks wrong, stop and ask.
 - Keep `docs/STATUS.md` up to date.
 - Never push.
-- Don't open `data/evals/` unless you're asked to.
+- Don't open `data/evals/` unless you're asked to. Seeding reads its three named files into tables of their own, and `backend/evaluations.py` scores from them.
 - Everything must work on Windows: write `package.json` scripts as `uv run` commands or `.mjs` files.

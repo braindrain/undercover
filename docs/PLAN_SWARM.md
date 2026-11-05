@@ -213,11 +213,11 @@ Each module has one job, and imports point one way. Nothing imports `service.py`
 |---|---|---|
 | `db.py` | The database: the engine, behind a lock on first use, the tables, seeding (now with the answer key) and reset | `sqlalchemy` |
 | `models.py` | The shapes the API sends and receives | `pydantic` |
-| `records.py` | New: looking up one record (`lookup` and `find`, moved from `main.py` so there's still one way) and `now` | `db` |
+| `records.py` | New: looking up one record (`lookup` and `find`, moved from `main.py` so there's still one way) and `now` | `fastapi`, `sqlalchemy` |
 | `documents.py`, `payout.py` | Unchanged | `db`, `models` |
 | `scoring.py` | New: the measures, as pure functions | `models` |
 | `runs.py` | New: a run's records: creating a dispatch, loading a run with its claims and totals, and its summary | `db`, `models`, `records` |
-| `evaluations.py` | New: making the copies, and reading the answer key to score a run. The only module beside `db.py` that names it | `db`, `models`, `records`, `runs`, `scoring` |
+| `evaluations.py` | New: making the copies, and reading the answer key to score a run. The only module beside `db.py` that names it | `db`, `models`, `runs`, `scoring` |
 | `agent_client.py` | Every call to the agent's service, now with a JSON body | `httpx` |
 | `main.py` | The operations and the claim rules | `agent_client`, `db`, `documents`, `evaluations`, `models`, `payout`, `records`, `runs` |
 | `seed.py` | `uv run -m backend.seed` | `db` |
@@ -418,17 +418,17 @@ Before starting: `MODEL_NAME` is unset, and any lab notebook's kernel is closed,
 
 Success criteria:
 
-- [ ] After one `npm run seed`, through the Supabase MCP server, `undercover.todos` is gone and the new tables are there, with 25 claims all `waiting`
-- [ ] A stop: with `npm run dev` running, a dispatch at N=3 started on the dashboard is stopped partway with `kill -9` on every process from `lsof -ti tcp:8002`, and `npm run dev` stops the others. After starting it again, the panel shows that dispatch as Stopped
-- [ ] The next dispatch: at N=25 it carries on the claims left in progress on the same threads with their failures unchanged, each with one decision, and works the rest. The claims' start times in `get_latest_dispatch` show them starting together
-- [ ] The run takes well under the sum of its claims' times, both read from `get_latest_dispatch`
-- [ ] Comparing claims worked from the start, each takes about as long as at N=3; if slower, `docs/STATUS.md` reports where the time goes, from model seconds against the rest, keeping to 4 connections
-- [ ] Claims held for sign-off wait. Signing one off on the dashboard through the Playwright MCP server during the dispatch shows it paid within five seconds
-- [ ] No claim fails for want of a database connection: no such error step on any claim, and none in the service's log
-- [ ] During the dispatch, sampled repeatedly through the Supabase MCP server, `pg_stat_activity` shows no more than 12 connections whose user is `postgres`
-- [ ] When the dispatch finishes, the panel shows its summary, model cost and time, and each figure matches the records
-- [ ] An evaluation of the evaluation set at N=25, and one of the held-out set's five `tiny` claims at N=5, both started on the Scoreboard page, appear there with every measure, and the queue page's counts are the same before and after
-- [ ] Opening an evaluation through the Playwright MCP server shows its misses and links to a copy's page, which has no sign-off form
-- [ ] Through Langfuse's API, the claims of the N=25 dispatch are found together by its tag. The legacy traces API isn't available on this account, so this uses the v2 observations API's `tags` filter, as `docs/STATUS.md` notes
-- [ ] `docs/SPEC.md`, `docs/TECH_STACK.md`, `docs/PROCESS.md`, `docs/CODE_STANDARDS.md` and `docs/STATUS.md` describe the product as it now is, and `docs/SPEC.md`'s Rules are unchanged
-- [ ] `npm run check` passes in full with `.env` moved out of the way: ruff, pyright, pytest at 80% or more, ESLint, Prettier, tsc, vitest at 80% or more, and Playwright
+- [x] After one `npm run seed`, through the Supabase MCP server, `undercover.todos` is gone and the new tables are there, with 25 claims all `waiting`
+- [x] A stop: with `npm run dev` running, a dispatch at N=3 started on the dashboard is stopped partway with `kill -9` on every process from `lsof -ti tcp:8002`, and `npm run dev` stops the others. After starting it again, the panel shows that dispatch as Stopped. Live, the backend's reloader stayed behind and held port 8000, so it had to be cleared by hand first; `docs/STATUS.md` says how
+- [x] The next dispatch: at N=25 it carries on the claims left in progress on the same threads with their failures unchanged, each with one decision, and works the rest. The claims' start times in `get_latest_dispatch` show them starting together
+- [x] The run takes well under the sum of its claims' times, both read from `get_latest_dispatch`
+- [x] Comparing claims worked from the start, each takes about as long as at N=3; if slower, `docs/STATUS.md` reports where the time goes, from model seconds against the rest, keeping to 4 connections
+- [x] Claims held for sign-off wait. Signing one off on the dashboard through the Playwright MCP server during the dispatch shows it paid within five seconds. Live, the backend recorded the payment 0.63 seconds after the sign-off; the page was read before its next refresh, so the record is the evidence, and `e2e/claim.spec.ts` covers the page showing it
+- [x] No claim fails for want of a database connection: no such error step on any claim, and none in the service's log
+- [x] During the dispatch, sampled repeatedly through the Supabase MCP server, `pg_stat_activity` shows no more than 12 connections whose user is `postgres`
+- [x] When the dispatch finishes, the panel shows its summary, model cost and time, and each figure matches the records
+- [x] An evaluation of the evaluation set at N=25, and one of the held-out set's five `tiny` claims at N=5, both started on the Scoreboard page, appear there with every measure, and the queue page's counts are the same before and after
+- [x] Opening an evaluation through the Playwright MCP server shows its misses and links to a copy's page, which has no sign-off form
+- [x] Through Langfuse's API, the claims of the N=25 dispatch are found together by its tag. The legacy traces API isn't available on this account, so this uses the v2 observations API's `tags` filter, as `docs/STATUS.md` notes
+- [x] `docs/SPEC.md`, `docs/TECH_STACK.md`, `docs/PROCESS.md`, `docs/CODE_STANDARDS.md` and `docs/STATUS.md` describe the product as it now is, and `docs/SPEC.md`'s Rules are unchanged
+- [x] `npm run check` passes in full with `.env` moved out of the way: ruff, pyright, pytest at 80% or more, ESLint, Prettier, tsc, vitest at 80% or more, and Playwright

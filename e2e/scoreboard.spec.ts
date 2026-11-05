@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { agentCalls } from "./agent-calls";
 
 // These tests stand in for the dispatcher: they drive an evaluation through the
 // API, deciding every copy the same way, so that some are misses.
@@ -59,10 +60,7 @@ test("starting an evaluation reaches the agent's service with its settings", asy
   await page.getByLabel(/^Claims/).selectOption("tiny");
   await page.getByRole("button", { name: "Start an evaluation" }).click();
   await expect
-    .poll(async () => {
-      const calls = await request.get("http://127.0.0.1:8003/calls");
-      return (await calls.json()) as string[];
-    })
+    .poll(async () => agentCalls(request))
     .toContain("evaluation 5 held_out tiny");
 });
 

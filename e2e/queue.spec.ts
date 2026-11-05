@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { agentCalls } from "./agent-calls";
 
 // These tests stand in for the dispatcher: they drive the run through the API.
 
@@ -19,12 +20,7 @@ test("starting a dispatch reaches the agent's service with N", async ({
   await expect(run.getByLabel("Claim agents at once")).toHaveValue("3");
   await run.getByLabel("Claim agents at once").selectOption("7");
   await run.getByRole("button", { name: "Start a dispatch" }).click();
-  await expect
-    .poll(async () => {
-      const calls = await request.get("http://127.0.0.1:8003/calls");
-      return (await calls.json()) as string[];
-    })
-    .toContain("dispatch 7");
+  await expect.poll(async () => agentCalls(request)).toContain("dispatch 7");
 });
 
 test("a dispatch shows its claims, its cost and time, and its summary", async ({
