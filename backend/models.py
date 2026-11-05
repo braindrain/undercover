@@ -8,8 +8,9 @@ Status = Literal[
     "waiting", "in_progress", "awaiting_sign_off", "decided", "left_for_handler"
 ]
 StepKind = Literal["tool_call", "tool_result", "read", "reply", "error"]
-RunStatus = Literal["running", "finished"]
-TodoStatus = Literal["todo", "in_progress", "done", "left_for_handler"]
+RunKind = Literal["dispatch", "evaluation"]
+RunEnd = Literal["finished", "stopped"]
+RunStatus = Literal["running", "finished", "stopped"]
 Benefit = Literal[
     "trip_cancellation",
     "trip_interruption",
@@ -22,6 +23,9 @@ Benefit = Literal[
 LineKind = Literal[
     "item", "electronics", "cash", "expense", "hotel", "meals_without_receipts"
 ]
+
+FEWEST_AGENTS = 1
+MOST_AGENTS = 25
 
 
 class Item(BaseModel):
@@ -197,31 +201,39 @@ class Contents(BaseModel):
     sections: list[SectionHeading]
 
 
-class Todo(BaseModel):
-    text: str = Field(min_length=1)
-    status: TodoStatus
-
-
-class TodoList(BaseModel):
-    todos: list[Todo]
-
-
 class Run(BaseModel):
-    run_id: int
-    cap: int
+    run_id: str
+    kind: RunKind
+    agents_at_once: int
+    claim_set: str | None
+    tiny: bool | None
+    model: str
+    reasoning_effort: str
     status: RunStatus
-    summary: str | None
     started_at: str
     finished_at: str | None
-    todos: list[Todo]
 
 
-class NewRun(BaseModel):
-    cap: int = Field(ge=1)
+class RunClaim(BaseModel):
+    claim_id: str
+    summary: str
+    status: Status
+    decision: str | None
+    payout: float | None
 
 
-class RunSummary(BaseModel):
-    summary: str = Field(min_length=1)
+class RunDetails(Run):
+    claims: list[RunClaim]
+
+
+class NewDispatch(BaseModel):
+    agents_at_once: int = Field(ge=FEWEST_AGENTS, le=MOST_AGENTS)
+    model: str = Field(min_length=1)
+    reasoning_effort: str = Field(min_length=1)
+
+
+class RunResult(BaseModel):
+    status: RunEnd
 
 
 class Line(BaseModel):

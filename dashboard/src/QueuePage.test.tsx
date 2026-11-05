@@ -21,7 +21,7 @@ const claims = [
   }),
 ];
 
-const routes = { "/api/claims": claims, "/api/runs/latest": null };
+const routes = { "/api/claims": claims, "/api/dispatches/latest": null };
 
 it("counts the claims in each state", async () => {
   stubFetch(routes);

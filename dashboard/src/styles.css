@@ -187,8 +187,7 @@ h3 {
   white-space: nowrap;
 }
 
-.chip-waiting,
-.chip-todo {
+.chip-waiting {
   background: var(--cerulean);
   color: #ffffff;
 }
@@ -205,13 +204,13 @@ h3 {
 }
 
 .chip-decided,
-.chip-done,
 .chip-finished,
 .chip-approve {
   background: var(--sea-green);
 }
 
-.chip-left_for_handler {
+.chip-left_for_handler,
+.chip-stopped {
   background: var(--raspberry);
   color: #ffffff;
 }
@@ -430,7 +429,7 @@ select {
   margin: 12px 0 0;
 }
 
-.todos {
+.run-claims {
   display: grid;
   gap: 8px;
   margin: 0;
@@ -438,14 +437,14 @@ select {
   list-style: none;
 }
 
-.todo {
+.run-claim {
   display: grid;
   grid-template-columns: 9.5em 1fr;
   align-items: baseline;
   gap: 12px;
 }
 
-.todo .chip {
+.run-claim .chip {
   justify-self: start;
 }
 

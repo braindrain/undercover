@@ -6,7 +6,7 @@ export type Status =
   | "left_for_handler";
 export type Verdict = "approve" | "decline" | "refer";
 export type StepKind = "tool_call" | "tool_result" | "read" | "reply" | "error";
-export type TodoStatus = "todo" | "in_progress" | "done" | "left_for_handler";
+export type RunStatus = "running" | "finished" | "stopped";
 
 export interface ClaimSummary {
   claim_id: string;
@@ -111,19 +111,23 @@ export interface Step {
   created_at: string;
 }
 
-export interface Todo {
-  text: string;
-  status: TodoStatus;
+export interface RunClaim {
+  claim_id: string;
+  summary: string;
+  status: Status;
+  decision: Verdict | null;
+  payout: number | null;
 }
 
 export interface Run {
-  run_id: number;
-  cap: number;
-  status: "running" | "finished";
-  summary: string | null;
+  run_id: string;
+  agents_at_once: number;
+  model: string;
+  reasoning_effort: string;
+  status: RunStatus;
   started_at: string;
   finished_at: string | null;
-  todos: Todo[];
+  claims: RunClaim[];
 }
 
 export const STATUS_LABELS: Record<Status, string> = {
@@ -134,11 +138,10 @@ export const STATUS_LABELS: Record<Status, string> = {
   left_for_handler: "Left for a handler",
 };
 
-export const TODO_LABELS: Record<TodoStatus, string> = {
-  todo: "To do",
-  in_progress: "In progress",
-  done: "Done",
-  left_for_handler: "Left for a handler",
+export const RUN_LABELS: Record<RunStatus, string> = {
+  running: "Running",
+  finished: "Finished",
+  stopped: "Stopped",
 };
 
 export const VERDICT_LABELS: Record<Verdict, string> = {
@@ -194,8 +197,8 @@ export const endpoints = {
   customer: (customerId: string) =>
     json<Customer>(`/api/customers/${customerId}`),
   handlers: json<Handler[]>("/api/handlers"),
-  latestRun: json<Run | null>("/api/runs/latest"),
-  instructions: (name: "queue" | "claim") => text(`/api/instructions/${name}`),
+  latestDispatch: json<Run | null>("/api/dispatches/latest"),
+  instructions: text("/api/instructions"),
   document: (name: DocumentName) => text(`/api/documents/${name}`),
 };
 

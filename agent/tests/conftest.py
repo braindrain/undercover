@@ -30,12 +30,14 @@ def local_backend(monkeypatch):
     """Reach the backend in-process, and retry without waiting."""
     monkeypatch.setattr(api, "client", lambda: TestClient(app))
     monkeypatch.setattr(harness, "RETRY_DELAY", 0)
+    monkeypatch.setattr(harness, "WORK_RETRY_DELAY", 0)
+    monkeypatch.setattr(harness, "WORK_RETRY_JITTER", False)
 
 
 @pytest.fixture(autouse=True)
 def checkpointer():
     """Give each test an empty in-memory checkpointer. A restart in a test is a
     new graph on the same checkpointer."""
-    harness.checkpointer.cache_clear()
+    harness.memory_saver.cache_clear()
     yield
-    harness.checkpointer.cache_clear()
+    harness.memory_saver.cache_clear()

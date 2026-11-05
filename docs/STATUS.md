@@ -6,7 +6,7 @@ The agent's harness from `docs/PLAN_HARNESS.md` is built: all five phases. After
 
 Durable state from `docs/PLAN_DURABLE.md` is built: all six phases. The records are on Supabase, the claim agent is a LangGraph graph that waits for a sign-off and carries on after a stop, and the agent has a service of its own. After pulling this build, run `npm run seed` to create the `undercover` schema on Supabase, then restart `npm run dev`.
 
-The swarm from `docs/PLAN_SWARM.md` is being built. Phase 1 is done: the agent defaults to `openai/gpt-6-luna` with low effort, and every model call and stretch of work is recorded in `model_calls` and `work_times`, with its run.
+The swarm from `docs/PLAN_SWARM.md` is being built. Phases 1 and 2 are done: the agent defaults to `openai/gpt-6-luna` with low effort, every model call and stretch of work is recorded with its run, and `agent/dispatcher.py` has replaced the queue agent and its to-do list. A dispatch can't be started from the dashboard until Phase 3.
 
 After the student's review (`docs/HUMAN_REVIEW_HARNESS.md`), the agent was restructured into an API client, a harness, its tools and its agents; both sets of instructions were rewritten as goals; the backend's lookups no longer build SQL from strings; and the dashboard calls the backend only from `api.ts`. `docs/PROCESS.md` and `docs/CODE_STANDARDS.md` now say how to keep it that way.
 

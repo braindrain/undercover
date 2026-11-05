@@ -5,6 +5,7 @@ from typing import Any, Literal
 import httpx
 
 BACKEND_URL = "http://localhost:8000"
+TIMEOUT = 150
 
 Document = Literal["policy_wording", "claims_manual"]
 Benefit = Literal[
@@ -24,7 +25,7 @@ class Refused(Exception):
 
 def client() -> httpx.Client:
     """Return a client for the backend."""
-    return httpx.Client(base_url=BACKEND_URL, timeout=30)
+    return httpx.Client(base_url=BACKEND_URL, timeout=TIMEOUT)
 
 
 def request(method: str, path: str, **kwargs: Any) -> httpx.Response:
@@ -34,18 +35,6 @@ def request(method: str, path: str, **kwargs: Any) -> httpx.Response:
     if response.is_client_error:
         raise Refused(response.json()["detail"])
     return response.raise_for_status()
-
-
-def list_claims() -> list[dict]:
-    return request("GET", "/api/claims").json()
-
-
-def waiting_claims() -> list[dict]:
-    return [claim for claim in list_claims() if claim["status"] == "waiting"]
-
-
-def claims_in_progress() -> list[str]:
-    return [c["claim_id"] for c in list_claims() if c["status"] == "in_progress"]
 
 
 def get_claim(claim_id: str) -> dict:
@@ -75,8 +64,8 @@ def read_section(document: Document, number: int) -> str:
     return request("GET", f"/api/documents/{document}/sections/{number}").text
 
 
-def get_instructions(name: Literal["queue", "claim"]) -> str:
-    return request("GET", f"/api/instructions/{name}").text
+def get_instructions() -> str:
+    return request("GET", "/api/instructions").text
 
 
 def start_claim(claim_id: str) -> dict:
@@ -131,17 +120,18 @@ def pay_claim(claim_id: str, amount: float) -> dict:
     return request("POST", path, json={"amount": amount}).json()
 
 
-def start_run(cap: int) -> int:
-    return request("POST", "/api/runs", json={"cap": cap}).json()["run_id"]
+def create_dispatch(agents_at_once: int, model: str, reasoning_effort: str) -> dict:
+    body = {
+        "agents_at_once": agents_at_once,
+        "model": model,
+        "reasoning_effort": reasoning_effort,
+    }
+    return request("POST", "/api/dispatches", json=body).json()
 
 
-def get_latest_run() -> dict | None:
-    return request("GET", "/api/runs/latest").json()
+def list_run_claims(run_id: str) -> list[str]:
+    return request("GET", f"/api/runs/{run_id}/claims").json()
 
 
-def set_todos(run_id: int, todos: list[dict]) -> None:
-    request("PUT", f"/api/runs/{run_id}/todos", json={"todos": todos})
-
-
-def finish_run(run_id: int, summary: str) -> None:
-    request("POST", f"/api/runs/{run_id}/finish", json={"summary": summary})
+def finish_run(run_id: str, status: Literal["finished", "stopped"]) -> None:
+    request("POST", f"/api/runs/{run_id}/finish", json={"status": status})

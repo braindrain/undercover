@@ -110,7 +110,7 @@ def test_the_payout_tool_uses_the_backends_rules():
 def test_an_unknown_section_is_a_plain_result():
     model = stub(
         call("read_section", document="claims_manual", number=99),
-        AIMessage(content="Done."),
+        *approve("CLM-1001", 420.0),
     )
     agents.work_claim("CLM-1001", model)
     assert steps("CLM-1001")[1]["kind"] == "tool_result"
@@ -126,16 +126,20 @@ def test_decline():
 
 
 def test_a_run_without_a_decision_counts_a_failure():
-    agents.work_claim("CLM-1001", stub(AIMessage(content="I can't decide.")))
+    with pytest.raises(agents.NoDecision):
+        agents.work_claim("CLM-1001", stub(AIMessage(content="I can't decide.")))
     assert claim("CLM-1001")["status"] == "waiting"
     assert claim("CLM-1001")["failures"] == 1
+    assert steps("CLM-1001")[-1]["text"] == (
+        "The agent stopped: CLM-1001 ended without a decision."
+    )
 
 
 def test_the_system_prompt_is_the_claim_instructions_alone():
-    model = stub(AIMessage(content="Done."))
+    model = stub(*approve("CLM-1001", 420.0))
     agents.work_claim("CLM-1001", model)
     prompt = model.prompts[0][0].content
-    assert prompt == client.get("/api/instructions/claim").text
+    assert prompt == client.get("/api/instructions").text
     assert "Policy Wording" not in prompt
 
 
@@ -226,13 +230,12 @@ def test_only_the_api_module_calls_the_backend():
 
 def test_the_claim_agent_has_no_payment_tool_and_its_instructions_no_payment():
     assert "pay_claim" not in [tool.name for tool in CLAIM_TOOLS]
-    text = client.get("/api/instructions/claim").text
+    text = client.get("/api/instructions").text
     assert not re.search(r"\bpa(y|id|ying|yment)s?\b", text, re.IGNORECASE)
 
 
-@pytest.mark.parametrize("name", ["claim", "queue"])
-def test_the_instructions_name_no_records(name):
-    text = client.get(f"/api/instructions/{name}").text
+def test_the_instructions_name_no_records():
+    text = client.get("/api/instructions").text
     assert not re.search(r"\b(CLM|CUS|POL)-", text)
 
 

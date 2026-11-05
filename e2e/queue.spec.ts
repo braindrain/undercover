@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// These tests stand in for the queue agent: they drive the run through the API.
+// These tests stand in for the dispatcher: they drive the run through the API.
 
 test("the queue shows every claim", async ({ page }) => {
   await page.goto("/");
@@ -10,39 +10,29 @@ test("the queue shows every claim", async ({ page }) => {
   await expect(page.getByRole("row")).toHaveCount(26);
 });
 
-test("the queue shows the agent's run, its to-do list and its summary", async ({
+test("the queue shows the latest dispatch and its claims", async ({
   page,
   request,
 }) => {
-  const started = await request.post("/api/runs", { data: { cap: 2 } });
-  const runId = String(((await started.json()) as { run_id: number }).run_id);
-  const setTodos = (statuses: string[]) =>
-    request.put(`/api/runs/${runId}/todos`, {
-      data: {
-        todos: ["CLM-1001 Flight home canceled", "CLM-1002 Laptop damaged"].map(
-          (text, index) => ({ text, status: statuses[index] }),
-        ),
-      },
-    });
-  await setTodos(["in_progress", "todo"]);
+  const created = await request.post("/api/dispatches", {
+    data: {
+      agents_at_once: 3,
+      model: "openai/gpt-6-luna",
+      reasoning_effort: "low",
+    },
+  });
+  const runId = ((await created.json()) as { run_id: string }).run_id;
   await page.goto("/");
   const run = page.getByRole("region", { name: "The agent's run" });
   await expect(run.getByText("Running")).toBeVisible();
-  await expect(run.getByText("0 of 2 worked")).toBeVisible();
-  const first = run.getByRole("listitem").first();
-  await expect(first.getByText("In progress")).toBeVisible();
-  await setTodos(["done", "left_for_handler"]);
-  await expect(first.getByText("Done")).toBeVisible();
-  await expect(run.getByText("2 of 2 worked")).toBeVisible();
+  const row = run.getByRole("listitem").filter({ hasText: "CLM-1020" });
+  await expect(row.getByText("Waiting")).toBeVisible();
+  expect((await request.post("/api/claims/CLM-1020/start")).ok()).toBe(true);
+  await expect(row.getByText("In progress")).toBeVisible();
   await request.post(`/api/runs/${runId}/finish`, {
-    data: { summary: "Worked two claims: one done, one left for a handler." },
+    data: { status: "finished" },
   });
-  await expect(
-    run.getByText("Worked two claims: one done, one left for a handler."),
-  ).toBeVisible();
-  await expect(
-    run.getByText("Finished", { exact: true }).first(),
-  ).toBeVisible();
+  await expect(run.getByText("Finished", { exact: true })).toBeVisible();
 });
 
 test("a claim that failed twice is left for a handler", async ({

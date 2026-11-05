@@ -134,18 +134,10 @@ def test_an_unknown_document_is_refused():
     assert client.get("/api/documents/evals").status_code == 422
 
 
-@pytest.mark.parametrize(
-    ("name", "heading"),
-    [("queue", "# Running the queue"), ("claim", "# Working a claim")],
-)
-def test_get_instructions(name, heading):
-    response = client.get(f"/api/instructions/{name}")
+def test_get_instructions():
+    response = client.get("/api/instructions")
     assert response.headers["content-type"].startswith("text/markdown")
-    assert response.text.startswith(heading)
-
-
-def test_unknown_instructions_are_refused():
-    assert client.get("/api/instructions/evals").status_code == 422
+    assert response.text.startswith("# Working a claim")
 
 
 def test_list_handlers():

@@ -1,12 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-test("both sets of instructions are shown read only", async ({ page }) => {
+test("the claim agent's instructions are shown read only", async ({ page }) => {
   await page.goto("/#/instructions");
-  await expect(
-    page
-      .getByRole("region", { name: "Running the queue" })
-      .getByText(/You are the UnderCover Agent, running the claims queue/),
-  ).toBeVisible();
   await expect(
     page
       .getByRole("region", { name: "Working a claim" })

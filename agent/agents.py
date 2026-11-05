@@ -1,16 +1,16 @@
-"""The UnderCover Agent: a queue agent that runs the queue, and a claim agent, a
-LangGraph graph that works one claim on its own thread, waits for a handler's
-sign-off when the backend says so, pays an approval, and carries on after a stop."""
+"""The UnderCover Agent's claim agent: a LangGraph graph that works one claim on its
+own thread, waits for a handler's sign-off when the backend says so, pays an
+approval, and carries on after a stop."""
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 from contextvars import Context
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from functools import partial
+from threading import Lock
 from time import monotonic
 from typing import Annotated, Any, TypedDict
 
-from langchain.agents import create_agent
 from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
@@ -22,13 +22,16 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 
 from agent import api, harness
-from agent.tools import CLAIM_TOOLS, QUEUE_TOOLS, RunContext, report
+from agent.tools import CLAIM_TOOLS
 
 CLAIM_CALL_LIMIT = 30
-STOPPED_RUN = (
-    "This run was stopped before it finished. The next run carried on with the "
-    "claims it had in progress."
-)
+
+working: set[str] = set()
+working_lock = Lock()
+
+
+class NoDecision(Exception):
+    """The claim agent finished without deciding the claim."""
 
 
 class ClaimState(TypedDict):
@@ -41,11 +44,6 @@ class ClaimState(TypedDict):
     payout: float
     paid: bool
     signed_off_by: str
-
-
-def queue_call_limit(cap: int) -> int:
-    """Return the queue agent's limit of model calls for a run with this cap."""
-    return 10 + 5 * cap
 
 
 @dataclass
@@ -158,42 +156,62 @@ def run_thread(
 ) -> str:
     """Run the claim graph on the claim's thread from `start` and return the
     agent's last reply, recording the stretch of work, so that a wait for a
-    sign-off between two stretches is never counted. A claim that fails with an
-    error, or ends without a decision, is released, which counts a failure on it;
-    a stop leaves it as is."""
+    sign-off between two stretches is never counted. A rate limit or a timeout
+    goes through as it is, for a retry to carry the claim on. Any other error,
+    or an end without a decision, releases the claim, which counts a failure on
+    it. A stop leaves it as it is."""
     claim_id = claim["claim_id"]
     context = ClaimContext(
         model=(llm or harness.model()).bind_tools(CLAIM_TOOLS),
-        instructions=SystemMessage(api.get_instructions("claim")),
+        instructions=SystemMessage(api.get_instructions()),
         run_id=run_id,
     )
-    config = harness.thread_config(claim["thread_id"])
+    config = harness.thread_config(claim["thread_id"], run_id)
     started_at, started = time_now(), monotonic()
     try:
         # A fresh context makes each claim a trace of its own in Langfuse, with
-        # its session, even when the queue agent's tool hands it out.
+        # its session, even inside the dispatcher's graph.
         result = Context().run(
             claim_graph().invoke, start, config, context=context, durability="sync"
         )
+        if api.get_claim(claim_id)["decision"] is None:
+            raise NoDecision(f"{claim_id} ended without a decision.")
     except Exception as error:
         api.record_step(claim_id, "error", f"The agent stopped: {error}")
-        api.release_claim(claim_id)
+        if not isinstance(error, harness.RETRIED_ERRORS):
+            api.release_claim(claim_id)
         raise
     finally:
         api.record_work(claim_id, run_id, started_at, time_now(), monotonic() - started)
-    if api.get_claim(claim_id)["decision"] is None:
-        api.release_claim(claim_id)
     return str(result["messages"][-1].text)
+
+
+@contextmanager
+def holding(claim_id: str) -> Iterator[bool]:
+    """Hold a claim while this process works it, yielding False if it's already
+    held, so that a dispatch and a sign-off never work one claim at once."""
+    with working_lock:
+        free = claim_id not in working
+        working.add(claim_id)
+    try:
+        yield free
+    finally:
+        if free:
+            with working_lock:
+                working.discard(claim_id)
 
 
 def work_claim(
     claim_id: str, llm: BaseChatModel | None = None, run_id: str | None = None
 ) -> str:
     """Start a waiting claim on a new thread and work it from a clean start."""
-    claim = api.start_claim(claim_id)
-    task = HumanMessage(f"Decide claim {claim_id}.")
-    start = {"messages": [task], "claim_id": claim_id, "model_calls": 0}
-    return run_thread(claim, start, llm, run_id)
+    with holding(claim_id) as free:
+        if not free:
+            return f"{claim_id} is already being worked."
+        claim = api.start_claim(claim_id)
+        task = HumanMessage(f"Decide claim {claim_id}.")
+        start = {"messages": [task], "claim_id": claim_id, "model_calls": 0}
+        return run_thread(claim, start, llm, run_id)
 
 
 def carry_on(
@@ -202,83 +220,32 @@ def carry_on(
     """Carry on a claim in progress from where its thread got to: with the
     handler's sign-off if it was waiting for one, from its last step if it was
     stopped, or from the start if it was stopped before its first step."""
-    claim = api.get_claim(claim_id)
-    saved = claim_graph().get_state(harness.thread_config(claim["thread_id"]))
-    if saved.next == ("sign_off",):
-        if claim["sign_off"] is None:
-            return f"{claim['claim_id']} is waiting for a handler's sign-off."
-        start: Any = Command(resume={"handler_id": claim["sign_off"]["handler_id"]})
-    elif saved.next:
-        start = None
-    elif not saved.values:
-        task = HumanMessage(f"Decide claim {claim['claim_id']}.")
-        start = {"messages": [task], "claim_id": claim["claim_id"], "model_calls": 0}
-    else:
-        return f"{claim['claim_id']} has nothing left to do."
-    return run_thread(claim, start, llm, run_id)
+    with holding(claim_id) as free:
+        if not free:
+            return f"{claim_id} is already being worked."
+        claim = api.get_claim(claim_id)
+        saved = claim_graph().get_state(harness.thread_config(claim["thread_id"]))
+        if saved.next == ("sign_off",):
+            if claim["sign_off"] is None:
+                return f"{claim_id} is waiting for a handler's sign-off."
+            start: Any = Command(resume={"handler_id": claim["sign_off"]["handler_id"]})
+        elif saved.next:
+            start = None
+        elif not saved.values:
+            task = HumanMessage(f"Decide claim {claim_id}.")
+            start = {"messages": [task], "claim_id": claim_id, "model_calls": 0}
+        else:
+            return f"{claim_id} has nothing left to do."
+        return run_thread(claim, start, llm, run_id)
 
 
-def carry_on_stopped(llm: BaseChatModel | None = None) -> Iterator[str]:
-    """Carry on every claim in progress, yielding each one's report, then finish
-    the latest run if it was stopped while still running."""
-    for claim_id in api.claims_in_progress():
-        error = None
-        try:
-            carry_on(claim_id, llm)
-        except Exception as failure:
-            error = failure
-        yield report(api.get_claim(claim_id), error)
-    latest = api.get_latest_run()
-    if latest and latest["status"] == "running":
-        api.finish_run(latest["run_id"], STOPPED_RUN)
-
-
-def missed_claims(run: RunContext) -> str | None:
-    """Remind the queue agent of the waiting claims it can still work, if any:
-    those it tried that are back in the queue, and new ones within its cap."""
-    waiting = [claim["claim_id"] for claim in api.waiting_claims()]
-    tried = [claim_id for claim_id in waiting if claim_id in run.worked]
-    untried = [claim_id for claim_id in waiting if claim_id not in run.worked]
-    missed = tried + untried[: run.cap - len(run.worked)]
-    if not missed:
-        return None
-    verb = "is" if len(missed) == 1 else "are"
-    return (
-        f"Before you finish: {', '.join(missed)} {verb} still waiting and within "
-        "this run's cap. Work them and keep your to-do list up to date, then "
-        "finish with your summary."
-    )
-
-
-def run_queue(cap: int, llm: BaseChatModel | None = None) -> Iterator[str]:
-    """Carry on the claims in progress, then run the queue agent over at most
-    `cap` claims, yielding each claim's report as it comes and then the summary,
-    which also finishes the run."""
-    llm = llm or harness.model()
-    yield from carry_on_stopped(llm)
-    run = RunContext(api.start_run(cap), cap, partial(work_claim, llm=llm))
-    agent = create_agent(
-        llm,
-        tools=QUEUE_TOOLS,
-        system_prompt=api.get_instructions("queue"),
-        context_schema=RunContext,
-        middleware=[
-            harness.FinishCheck(missed_claims),
-            *harness.middleware(queue_call_limit(cap)),
-        ],
-    )
-    task = {"role": "user", "content": f"Work the queue, capped at {cap} claims."}
-    updates = agent.stream({"messages": [task]}, context=run, stream_mode="updates")
-    summary = ""
-    try:
-        for update in updates:
-            for message in update.get("tools", {}).get("messages", []):
-                if message.name == "work_claim":
-                    yield str(message.text)
-            for message in update.get("model", {}).get("messages", []):
-                summary = str(message.text)
-    except Exception as error:
-        summary = f"The run stopped: {error}"
-    summary = summary or "The run finished without a summary."
-    api.finish_run(run.run_id, summary)
-    yield summary
+def work(claim_id: str, run: dict) -> str:
+    """Work one claim of a run: the only way the dispatcher reaches the claim
+    agent. A waiting claim starts, a claim in progress carries on, and any other
+    has nothing to do."""
+    status = api.get_claim(claim_id)["status"]
+    if status == "waiting":
+        return work_claim(claim_id, run_id=run["run_id"])
+    if status == "in_progress":
+        return carry_on(claim_id, run_id=run["run_id"])
+    return f"{claim_id} is {status}, so there's nothing to do."

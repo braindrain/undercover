@@ -1,10 +1,10 @@
 import {
   formatMoney,
+  RUN_LABELS,
   STATUS_LABELS,
-  TODO_LABELS,
   VERDICT_LABELS,
+  type RunStatus,
   type Status,
-  type TodoStatus,
   type Verdict,
 } from "./api";
 
@@ -12,8 +12,8 @@ export function StatusChip({ status }: Readonly<{ status: Status }>) {
   return <span className={`chip chip-${status}`}>{STATUS_LABELS[status]}</span>;
 }
 
-export function TodoChip({ status }: Readonly<{ status: TodoStatus }>) {
-  return <span className={`chip chip-${status}`}>{TODO_LABELS[status]}</span>;
+export function RunChip({ status }: Readonly<{ status: RunStatus }>) {
+  return <span className={`chip chip-${status}`}>{RUN_LABELS[status]}</span>;
 }
 
 export function VerdictChip({ verdict }: Readonly<{ verdict: Verdict }>) {

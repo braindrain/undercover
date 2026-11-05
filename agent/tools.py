@@ -1,17 +1,13 @@
-"""The agents' tools: the claim agent's tools for working one claim, and the queue
-agent's tools for running the queue."""
+"""The claim agent's tools for working one claim."""
 
 import json
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import Literal, TypedDict
+from typing import Literal
 
-from langchain.tools import ToolRuntime
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from agent import api
-from agent.api import Benefit, Document, Refused
+from agent.api import Benefit, Document
 
 DOCUMENT_TITLES: dict[Document, str] = {
     "policy_wording": "Policy wording",
@@ -129,104 +125,3 @@ CLAIM_TOOLS = [
     calculate_payout,
     record_decision,
 ]
-
-
-class TodoItem(TypedDict):
-    text: str
-    status: Literal["todo", "in_progress", "done", "left_for_handler"]
-
-
-@dataclass
-class RunContext:
-    """One run over the queue: its cap, the claim agent each claim is handed to,
-    and the claims handed out so far."""
-
-    run_id: int
-    cap: int
-    claim_agent: Callable[[str], object]
-    worked: set[str] = field(default_factory=set)
-
-
-def money(amount: float) -> str:
-    """Format an amount in US dollars, such as $1,250.00."""
-    return f"${amount:,.2f}"
-
-
-def report(claim: dict, error: Exception | None) -> str:
-    """Describe in one line where a claim stands after a claim agent worked it."""
-    claim_id, status, decision = claim["claim_id"], claim["status"], claim["decision"]
-    why = str(error).rstrip(".") if error else "the run ended without a decision"
-    if status == "left_for_handler":
-        return f"{claim_id}: failed twice ({why}), left for a handler."
-    if status == "waiting":
-        return f"{claim_id}: failed ({why}), back in the queue."
-    if decision["decision"] == "decline":
-        return f"{claim_id}: declined."
-    if decision["decision"] == "refer":
-        return f"{claim_id}: referred."
-    payout = money(decision["payout"])
-    if status == "awaiting_sign_off":
-        return f"{claim_id}: approved, {payout}, waiting for sign-off."
-    return (
-        f"{claim_id}: approved, {payout}, {'paid' if claim['payment'] else 'not paid'}."
-    )
-
-
-@tool
-def list_waiting_claims(runtime: ToolRuntime[RunContext]) -> str:
-    """List the claims waiting in the queue, and how much of this run's cap is
-    left."""
-    run = runtime.context
-    claims = api.waiting_claims()
-    lines = [
-        f"{len(claims)} claims waiting. This run is capped at {run.cap} claims "
-        f"and has worked {len(run.worked)}."
-    ]
-    for claim in claims:
-        retry = (
-            " (back in the queue after a failure)"
-            if claim["claim_id"] in run.worked
-            else ""
-        )
-        lines.append(
-            f"{claim['claim_id']}, submitted {claim['submitted_on']}, "
-            f"{claim['claim_type']}, {money(claim['amount_claimed'])} claimed: "
-            f"{claim['summary']}{retry}"
-        )
-    return "\n".join(lines)
-
-
-@tool
-def write_todos(todos: list[TodoItem], runtime: ToolRuntime[RunContext]) -> str:
-    """Replace this run's to-do list, which the claims team watches, with every
-    item in order. An item is todo, in_progress, done or left_for_handler."""
-    api.set_todos(runtime.context.run_id, [dict(todo) for todo in todos])
-    return "Saved."
-
-
-@tool
-def work_claim(claim_id: str, runtime: ToolRuntime[RunContext]) -> str:
-    """Hand one waiting claim to a fresh claim agent, which works it from a clean
-    start, and return its one-line report. A claim that fails goes back in the
-    queue to be tried again, and one that fails twice is left for a handler.
-    Trying a claim again doesn't count against the cap."""
-    run = runtime.context
-    status = api.get_claim(claim_id)["status"]
-    if status != "waiting":
-        raise Refused(
-            f"{claim_id} is {status.replace('_', ' ')}, so it can't be worked."
-        )
-    if claim_id not in run.worked and len(run.worked) >= run.cap:
-        raise Refused(
-            f"this run is capped at {run.cap} claims and has worked {len(run.worked)}."
-        )
-    run.worked.add(claim_id)
-    error = None
-    try:
-        run.claim_agent(claim_id)
-    except Exception as failure:
-        error = failure
-    return report(api.get_claim(claim_id), error)
-
-
-QUEUE_TOOLS = [list_waiting_claims, write_todos, work_claim]

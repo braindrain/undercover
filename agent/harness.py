@@ -1,22 +1,14 @@
-"""The agents' harness: the model, the tracing, the checkpointer, the retry policies
-and steps for graph nodes, and the middleware the queue agent runs inside."""
+"""The agent's harness, which knows nothing about claims: the model and its usage,
+the tracing, the checkpointer, the retry policies, and steps for graph nodes."""
 
 import os
-from collections.abc import Callable
 from functools import cache
+from threading import Lock
 from typing import Any
 
 import httpx
-from langchain.agents.middleware import (
-    AgentMiddleware,
-    AgentState,
-    ModelCallLimitMiddleware,
-    ModelRetryMiddleware,
-    ToolCallRequest,
-    ToolRetryMiddleware,
-    hook_config,
-)
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.exceptions import ModelRateLimitError, ModelTimeoutError
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from langfuse import get_client
@@ -25,8 +17,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.prebuilt.tool_node import ToolInvocationError
-from langgraph.runtime import Runtime
-from langgraph.types import Command, RetryPolicy
+from langgraph.types import RetryPolicy
 from psycopg import Connection
 from psycopg.rows import DictRow, dict_row
 from psycopg_pool import ConnectionPool
@@ -41,11 +32,16 @@ NO_EFFORT = "none"
 MODEL_RETRIES = 3
 TOOL_RETRIES = 2
 RETRY_DELAY = 1.0
+WORK_RETRIES = 3
+WORK_RETRY_DELAY = 5.0
+WORK_RETRY_JITTER = True
+RETRIED_ERRORS = (ModelRateLimitError, ModelTimeoutError)
 SCHEMA = "undercover"
 POOL_SIZE = 4
+POOL_WAIT = 120
 
-ToolHandler = Callable[[ToolCallRequest], ToolMessage | Command[Any]]
 Step = tuple[str, str]
+pool_lock = Lock()
 
 
 def model_settings() -> tuple[str, str]:
@@ -87,13 +83,17 @@ def tracing_on() -> bool:
     return bool(os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"))
 
 
-def thread_config(thread_id: str) -> RunnableConfig:
+def thread_config(thread_id: str, tag: str | None = None) -> RunnableConfig:
     """Return the config that runs a graph on a thread, traced in Langfuse in a
-    session named after the thread when the Langfuse keys are set."""
+    session named after the thread, with `tag` if it has one, when the Langfuse
+    keys are set."""
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     if tracing_on():
         config["callbacks"] = [CallbackHandler()]
-        config["metadata"] = {"langfuse_session_id": thread_id}
+        config["metadata"] = {
+            "langfuse_session_id": thread_id,
+            **({"langfuse_tags": [tag]} if tag else {}),
+        }
     return config
 
 
@@ -105,11 +105,13 @@ def flush_traces() -> None:
 
 def connection_pool(url: str) -> ConnectionPool[Connection[DictRow]]:
     """Return a pool, not yet opened, of at most POOL_SIZE connections to the
-    database at `url`, in our schema, with the settings the checkpointer needs."""
+    database at `url`, in our schema, with the settings the checkpointer needs.
+    Whoever needs a connection waits for one rather than fail."""
     return ConnectionPool[Connection[DictRow]](
         url,
         min_size=1,
         max_size=POOL_SIZE,
+        timeout=POOL_WAIT,
         kwargs={
             "autocommit": True,
             "prepare_threshold": 0,
@@ -121,19 +123,39 @@ def connection_pool(url: str) -> ConnectionPool[Connection[DictRow]]:
 
 
 @cache
-def checkpointer() -> BaseCheckpointSaver:
-    """Return this process's checkpointer: in Postgres when DATABASE_URL is set,
-    with its schema and tables set up, and in memory otherwise."""
-    url = os.getenv("DATABASE_URL")
-    if not url:
-        return InMemorySaver()
+def shared_pool(url: str) -> ConnectionPool[Connection[DictRow]]:
+    """Return this process's pool, open, with the schema and the checkpointer's
+    tables set up."""
     pool = connection_pool(url)
     pool.open(wait=True)
     with pool.connection() as conn:
         conn.execute(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}")
-    saver = PostgresSaver(pool)
-    saver.setup()
-    return saver
+    PostgresSaver(pool).setup()
+    return pool
+
+
+@cache
+def memory_saver() -> InMemorySaver:
+    """Return this process's in-memory checkpointer."""
+    return InMemorySaver()
+
+
+def checkpointer() -> BaseCheckpointSaver:
+    """Return a checkpointer: in Postgres when DATABASE_URL is set, and in memory
+    otherwise. `PostgresSaver` holds a lock around every read and write, so each
+    claim run gets a saver of its own on the shared pool, and the lock stops
+    threads racing to open that pool, as `cache` alone wouldn't."""
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        return memory_saver()
+    with pool_lock:
+        pool = shared_pool(url)
+    return PostgresSaver(pool)
+
+
+def clear_thread(thread_id: str) -> None:
+    """Delete everything saved on a thread."""
+    checkpointer().delete_thread(thread_id)
 
 
 class CallLimitReached(Exception):
@@ -159,6 +181,18 @@ def tool_retry() -> RetryPolicy:
         initial_interval=RETRY_DELAY,
         jitter=False,
         retry_on=httpx.TransportError,
+    )
+
+
+def work_retry() -> RetryPolicy:
+    """Return the retry policy for a node that does a whole stretch of work: a
+    rate limit or a timeout waits, with jitter so that a swarm doesn't all come
+    back at once, then carries on."""
+    return RetryPolicy(
+        max_attempts=WORK_RETRIES + 1,
+        initial_interval=WORK_RETRY_DELAY,
+        jitter=WORK_RETRY_JITTER,
+        retry_on=RETRIED_ERRORS,
     )
 
 
@@ -188,55 +222,3 @@ def tool_error(error: Refused | ToolInvocationError) -> str:
     if isinstance(error, ToolInvocationError):
         return error.message
     return refusal(error)
-
-
-class Refusals(AgentMiddleware):
-    """Tells the model why a tool refused, so that it can carry on."""
-
-    def wrap_tool_call(
-        self, request: ToolCallRequest, handler: ToolHandler
-    ) -> ToolMessage | Command[Any]:
-        try:
-            return handler(request)
-        except Refused as error:
-            call = request.tool_call
-            return ToolMessage(
-                refusal(error), tool_call_id=call["id"], name=call["name"]
-            )
-
-
-class FinishCheck(AgentMiddleware):
-    """Sends the agent back to work when it tries to finish and `check` returns a
-    reminder for it."""
-
-    def __init__(self, check: Callable[[Any], str | None]) -> None:
-        super().__init__()
-        self.check = check
-
-    @hook_config(can_jump_to=["model"])
-    def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
-        message = state["messages"][-1]
-        if not isinstance(message, AIMessage) or message.tool_calls:
-            return None
-        reminder = self.check(runtime.context)
-        if reminder is None:
-            return None
-        return {"messages": [HumanMessage(reminder)], "jump_to": "model"}
-
-
-def middleware(call_limit: int) -> list[AgentMiddleware[Any, Any, Any]]:
-    """Return the middleware the queue agent runs inside: refusals passed to the
-    model, failed model calls and tool calls that can't reach the backend retried,
-    and a stop at `call_limit` model calls."""
-    return [
-        Refusals(),
-        ModelRetryMiddleware(
-            max_retries=MODEL_RETRIES, on_failure="error", initial_delay=RETRY_DELAY
-        ),
-        ToolRetryMiddleware(
-            max_retries=TOOL_RETRIES,
-            retry_on=(httpx.TransportError,),
-            initial_delay=RETRY_DELAY,
-        ),
-        ModelCallLimitMiddleware(run_limit=call_limit, exit_behavior="error"),
-    ]

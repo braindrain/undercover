@@ -5,10 +5,12 @@ import json
 import os
 from functools import cache
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     Column,
     Engine,
     Float,
@@ -28,8 +30,10 @@ DATA = Path(__file__).parent.parent / "data"
 DEFAULT_PATH = Path(__file__).parent / "undercover.db"
 SCHEMA = "undercover"
 POOL_SIZE = 4
+POOL_WAIT = 120
 
 metadata = MetaData()
+engine_lock = Lock()
 
 
 def record_table(name: str, key: str) -> Table:
@@ -51,6 +55,7 @@ claims = Table(
     Column("status", String, nullable=False),
     Column("failures", Integer, nullable=False),
     Column("thread_id", String),
+    Column("submitted_on", String, nullable=False),
     Column("data", JSON, nullable=False),
 )
 policies = record_table("policies", "policy_id")
@@ -116,20 +121,23 @@ work_times = Table(
 runs = Table(
     "runs",
     metadata,
-    Column("run_id", Integer, primary_key=True, autoincrement=True),
-    Column("cap", Integer, nullable=False),
+    Column("run_id", String, primary_key=True),
+    Column("kind", String, nullable=False),
+    Column("agents_at_once", Integer, nullable=False),
+    Column("claim_set", String),
+    Column("tiny", Boolean),
+    Column("model", String, nullable=False),
+    Column("reasoning_effort", String, nullable=False),
     Column("status", String, nullable=False),
-    Column("summary", String),
     Column("started_at", String, nullable=False),
     Column("finished_at", String),
 )
-todos = Table(
-    "todos",
+run_claims = Table(
+    "run_claims",
     metadata,
-    Column("run_id", Integer, primary_key=True),
-    Column("position", Integer, primary_key=True),
-    Column("text", String, nullable=False),
-    Column("status", String, nullable=False),
+    Column("run_id", String, primary_key=True),
+    Column("claim_id", String, primary_key=True),
+    Column("position", Integer, nullable=False),
 )
 
 RECORDS = {
@@ -164,6 +172,7 @@ def create(url: str) -> Engine:
         parsed.set(drivername="postgresql+psycopg"),
         pool_size=POOL_SIZE,
         max_overflow=0,
+        pool_timeout=POOL_WAIT,
         pool_pre_ping=True,
         connect_args={"options": f"-c search_path={SCHEMA}"},
     )
@@ -180,8 +189,10 @@ def engine_for(url: str) -> Engine:
 
 
 def engine() -> Engine:
-    """Return the engine for this process's database."""
-    return engine_for(database_url())
+    """Return the engine for this process's database. The lock stops threads racing
+    to create it, as `cache` alone wouldn't."""
+    with engine_lock:
+        return engine_for(database_url())
 
 
 def seed(target: Engine) -> None:
@@ -203,6 +214,7 @@ def seed(target: Engine) -> None:
                         "policy_id": claim["policy_id"],
                         "status": "waiting",
                         "failures": 0,
+                        "submitted_on": claim["submitted_on"],
                         "data": claim,
                     }
                     for claim in queue

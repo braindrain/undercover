@@ -21,7 +21,10 @@ it("parses routes", () => {
 });
 
 it("shows the queue by default", async () => {
-  stubFetch({ "/api/claims": [summary({})], "/api/runs/latest": null });
+  stubFetch({
+    "/api/claims": [summary({})],
+    "/api/dispatches/latest": null,
+  });
   render(<App />);
   expect(
     await screen.findByRole("heading", { name: "Claims queue" }),
@@ -33,12 +36,11 @@ it("shows the queue by default", async () => {
 
 it("follows the hash to the instructions", async () => {
   stubFetch({
-    "/api/instructions/queue": "# Running the queue",
-    "/api/instructions/claim": "# Working a claim",
+    "/api/instructions": "# Working a claim",
     "/api/documents/policy_wording": "# Policy Wording",
     "/api/documents/claims_manual": "# Claims Manual",
   });
   window.location.hash = "#/instructions";
   render(<App />);
-  expect(await screen.findByText("# Running the queue")).toBeDefined();
+  expect(await screen.findByText("# Working a claim")).toBeDefined();
 });

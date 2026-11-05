@@ -304,25 +304,25 @@ Build the dispatcher, make the connections fit 25 agents, and remove the queue a
 
 Success criteria:
 
-- [ ] A test holds each claim open and counts: with 8 claims at N=3 the most at once is exactly 3, and at N=1 it's 1
-- [ ] A dispatch works the claims in progress and waiting, oldest submitted first with ties by id, and leaves the claims held for sign-off and the decided ones alone
-- [ ] A dispatch with nothing to work finishes at once
-- [ ] A rate limit: a stub model that raises `ModelRateLimitError` partway through one claim of several, then recovers, ends with one decision on the same thread, failures still 0, and the prompt after the retry holds the earlier tool results. The same test passes for `ModelTimeoutError`
-- [ ] Retries run out: with several claims in the dispatch, one that always hits a rate limit stays `in_progress` with failures 0, the others finish, and `dispatch` returns normally with the run `finished`. This is the regression test for the LangGraph bug, and it fails on 1.2.12
-- [ ] The next dispatch carries that claim on as the same attempt, to one decision
-- [ ] A claim that fails with any other error goes back to `waiting`, the same dispatch tries it once more on a new thread, and it ends decided with 1 failure
-- [ ] A claim that fails twice ends `left_for_handler`, and the dispatch finishes. A claim that already had one failure is left after its next failure, with no further try
-- [ ] A claim that ends with no decision counts as a failure and is tried once more
-- [ ] A claim held for sign-off in a dispatch waits on its own thread and doesn't pause the dispatch, and a sign-off after the dispatch still pays it once
-- [ ] A claim the service is carrying on after a sign-off is skipped by a dispatch, with one payment; a sign-off's `carry_on` during a dispatch's work on that claim does nothing, with one payment
-- [ ] A claim signed off while the service was down is paid by the next dispatch
-- [ ] Each claim is a trace of its own inside the dispatcher, with its session and its run's tag (`langfuse_tags`), and `thread_config` adds no tag with no run
-- [ ] Tests check the checkpointer: each call in Postgres mode returns a new saver on one shared pool, `setup()` runs once, the pool has at most 4 connections and a 120-second wait, and 25 threads at once open one pool. In memory, the saver is shared
-- [ ] Tests check the backend's engine: a pool of 4, no overflow, a 120-second wait, and one engine from 25 threads at once
-- [ ] Structure tests: `dispatcher.py` uses only `agents.work` from `agents`, imports no chat model, and compiles with no checkpointer. `run_queue`, `write_todos`, `create_agent` and the middleware's names appear nowhere in `agent/`
-- [ ] `uv run -m agent CLM-1001` works one claim, and `uv run -m agent` with no claim id exits with a usage message (tested with a stub)
-- [ ] Vitest tests pass for the run panel with a dispatch's claims, and for the instructions page; `npm run e2e` passes with a dispatch played out through the API, and with the to-do test gone
-- [ ] `npm run check` passes with coverage at or above 80%
+- [x] A test holds each claim open and counts: with 8 claims at N=3 the most at once is exactly 3, and at N=1 it's 1
+- [x] A dispatch works the claims in progress and waiting, oldest submitted first with ties by id, and leaves the claims held for sign-off and the decided ones alone
+- [x] A dispatch with nothing to work finishes at once
+- [x] A rate limit: a stub model that raises `ModelRateLimitError` partway through one claim of several, then recovers, ends with one decision on the same thread, failures still 0, and the prompt after the retry holds the earlier tool results. The same test passes for `ModelTimeoutError`
+- [x] Retries run out: with several claims in the dispatch, one that always hits a rate limit stays `in_progress` with failures 0, the others finish, and `dispatch` returns normally with the run `finished`. This is the regression test for the LangGraph bug, and it fails on 1.2.12
+- [x] The next dispatch carries that claim on as the same attempt, to one decision
+- [x] A claim that fails with any other error goes back to `waiting`, the same dispatch tries it once more on a new thread, and it ends decided with 1 failure
+- [x] A claim that fails twice ends `left_for_handler`, and the dispatch finishes. A claim that already had one failure is left after its next failure, with no further try
+- [x] A claim that ends with no decision counts as a failure and is tried once more
+- [x] A claim held for sign-off in a dispatch waits on its own thread and doesn't pause the dispatch, and a sign-off after the dispatch still pays it once
+- [x] A claim the service is carrying on after a sign-off is skipped by a dispatch, with one payment; a sign-off's `carry_on` during a dispatch's work on that claim does nothing, with one payment
+- [x] A claim signed off while the service was down is paid by the next dispatch
+- [x] Each claim is a trace of its own inside the dispatcher, with its session and its run's tag (`langfuse_tags`), and `thread_config` adds no tag with no run
+- [x] Tests check the checkpointer: each call in Postgres mode returns a new saver on one shared pool, `setup()` runs once, the pool has at most 4 connections and a 120-second wait, and 25 threads at once open one pool. In memory, the saver is shared
+- [x] Tests check the backend's engine: a pool of 4, no overflow, a 120-second wait, and one engine from 25 threads at once
+- [x] Structure tests: `dispatcher.py` uses only `agents.work` from `agents`, imports no chat model, and compiles with no checkpointer. `run_queue`, `write_todos`, `create_agent` and the middleware's names appear nowhere in `agent/`
+- [x] `uv run -m agent CLM-1001` works one claim, and `uv run -m agent` with no claim id exits with a usage message (tested with a stub)
+- [x] Vitest tests pass for the run panel with a dispatch's claims, and for the instructions page; `npm run e2e` passes with a dispatch played out through the API, and with the to-do test gone
+- [x] `npm run check` passes with coverage at or above 80%
 
 ## Phase 3: Starting a dispatch from the dashboard
 

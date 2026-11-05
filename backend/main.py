@@ -3,15 +3,15 @@
 import logging
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated
 from uuid import uuid4
 
 import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import Connection, delete, func, insert, select, update
+from sqlalchemy import Connection, insert, select, update
 
-from backend import agent_client, db, documents, payout
+from backend import agent_client, db, documents, payout, runs
 from backend.documents import DocumentName
 from backend.models import (
     Claim,
@@ -20,10 +20,10 @@ from backend.models import (
     Customer,
     Handler,
     NewDecision,
+    NewDispatch,
     NewModelCall,
     NewPayment,
     NewPayout,
-    NewRun,
     NewSignOff,
     NewStep,
     NewWork,
@@ -31,15 +31,14 @@ from backend.models import (
     Policy,
     PreviousClaim,
     Run,
-    RunSummary,
+    RunDetails,
+    RunResult,
     Status,
     Step,
-    Todo,
-    TodoList,
 )
 from backend.records import find, lookup, now
 
-INSTRUCTIONS = Path(__file__).parent / "instructions"
+INSTRUCTIONS = Path(__file__).parent / "instructions" / "claim.md"
 MAX_FAILURES = 2
 
 app = FastAPI(title="UnderCover")
@@ -105,25 +104,6 @@ def update_claim(conn: Connection, claim_id: str, **values: object) -> None:
 def load_customer(conn: Connection, customer_id: str) -> Customer:
     """Return a customer with their contact details and claim history."""
     return Customer(**find(conn, db.customers, customer_id)["data"])
-
-
-def load_run(conn: Connection, run_id: int) -> Run:
-    """Return a run with its to-do list, in order."""
-    run = find(conn, db.runs, run_id)
-    todos = conn.execute(
-        select(db.todos.c.text, db.todos.c.status)
-        .where(db.todos.c.run_id == run_id)
-        .order_by(db.todos.c.position)
-    ).mappings()
-    return Run(**run, todos=[Todo.model_validate(dict(todo)) for todo in todos])
-
-
-def running_run(conn: Connection, run_id: int) -> Run:
-    """Return a run that is still running, or refuse."""
-    run = load_run(conn, run_id)
-    if run.status != "running":
-        raise HTTPException(409, f"Run {run_id} has finished.")
-    return run
 
 
 @app.get("/api/health", operation_id="health")
@@ -219,13 +199,13 @@ def read_section(document: DocumentName, number: int) -> str:
 
 
 @app.get(
-    "/api/instructions/{name}",
+    "/api/instructions",
     operation_id="get_instructions",
     response_class=MarkdownResponse,
 )
-def get_instructions(name: Literal["queue", "claim"]) -> str:
-    """Return the agent's instructions for running the queue or working a claim."""
-    return (INSTRUCTIONS / f"{name}.md").read_text(encoding="utf-8")
+def get_instructions() -> str:
+    """Return the claim agent's instructions."""
+    return INSTRUCTIONS.read_text(encoding="utf-8")
 
 
 @app.get("/api/handlers", operation_id="list_handlers")
@@ -421,47 +401,32 @@ def run_agent(claim_id: str, conn: Database) -> Claim:
     return claim
 
 
-@app.post("/api/runs", operation_id="start_run")
-def start_run(new_run: NewRun, conn: Database) -> Run:
-    """Start a run of the agent over the queue, capped at a number of claims."""
-    run_id = conn.execute(
-        insert(db.runs)
-        .values(cap=new_run.cap, status="running", started_at=now())
-        .returning(db.runs.c.run_id)
-    ).scalar_one()
-    return load_run(conn, run_id)
+@app.post("/api/dispatches", operation_id="create_dispatch")
+def create_dispatch(new_dispatch: NewDispatch, conn: Database) -> Run:
+    """Record a dispatch and choose its claims, for the agent's service."""
+    return runs.create_dispatch(conn, new_dispatch)
 
 
-@app.get("/api/runs/latest", operation_id="get_latest_run")
-def get_latest_run(conn: Database) -> Run | None:
-    """Return the latest run with its to-do list, or null before the first run."""
-    run_id = conn.execute(select(func.max(db.runs.c.run_id))).scalar()
-    return None if run_id is None else load_run(conn, run_id)
+@app.get("/api/dispatches/latest", operation_id="get_latest_dispatch")
+def get_latest_dispatch(conn: Database) -> RunDetails | None:
+    """Return the latest dispatch with its claims, or null before the first."""
+    return runs.latest_dispatch(conn)
 
 
-@app.put("/api/runs/{run_id}/todos", operation_id="set_todos")
-def set_todos(run_id: int, todo_list: TodoList, conn: Database) -> Run:
-    """Replace a running run's to-do list."""
-    running_run(conn, run_id)
-    conn.execute(delete(db.todos).where(db.todos.c.run_id == run_id))
-    if todo_list.todos:
-        conn.execute(
-            insert(db.todos),
-            [
-                {"run_id": run_id, "position": position, **todo.model_dump()}
-                for position, todo in enumerate(todo_list.todos)
-            ],
-        )
-    return load_run(conn, run_id)
+@app.get("/api/runs/{run_id}/claims", operation_id="list_run_claims")
+def list_run_claims(run_id: str, conn: Database) -> list[str]:
+    """List the ids of a run's claims, in the order they're worked."""
+    find(conn, db.runs, run_id)
+    return runs.claim_ids(conn, run_id)
+
+
+@app.post("/api/runs/stop", operation_id="stop_running_runs")
+def stop_running_runs(conn: Database) -> list[str]:
+    """Mark every running run as stopped, and list their ids."""
+    return runs.stop_running(conn)
 
 
 @app.post("/api/runs/{run_id}/finish", operation_id="finish_run")
-def finish_run(run_id: int, run_summary: RunSummary, conn: Database) -> Run:
-    """Finish a running run with its summary for the handlers."""
-    running_run(conn, run_id)
-    conn.execute(
-        update(db.runs)
-        .where(db.runs.c.run_id == run_id)
-        .values(status="finished", summary=run_summary.summary, finished_at=now())
-    )
-    return load_run(conn, run_id)
+def finish_run(run_id: str, result: RunResult, conn: Database) -> Run:
+    """End a running run as finished or stopped."""
+    return runs.finish(conn, run_id, result.status)

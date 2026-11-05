@@ -1,78 +1,55 @@
 import { endpoints, formatTime, type Run } from "./api";
-import { Loading, TodoChip } from "./components";
+import { Loading, RunChip, StatusChip } from "./components";
 import { useResource } from "./hooks";
 
-function TodoList({ run }: Readonly<{ run: Run }>) {
-  if (!run.todos.length)
-    return (
-      <p className="muted">The agent hasn't written its to-do list yet.</p>
-    );
-  const worked = run.todos.filter(
-    (todo) => todo.status === "done" || todo.status === "left_for_handler",
-  ).length;
+function RunClaims({ run }: Readonly<{ run: Run }>) {
+  if (!run.claims.length)
+    return <p className="muted">This dispatch had no claims to work.</p>;
   return (
-    <>
-      <h3>
-        To-do list{" "}
-        <span className="muted">
-          {worked} of {run.todos.length} worked
-        </span>
-      </h3>
-      <ol className="todos">
-        {run.todos.map((todo, position) => (
-          <li className="todo" key={position}>
-            <TodoChip status={todo.status} />
-            <span>{todo.text}</span>
-          </li>
-        ))}
-      </ol>
-    </>
+    <ol className="run-claims">
+      {run.claims.map((claim) => (
+        <li className="run-claim" key={claim.claim_id}>
+          <StatusChip status={claim.status} />
+          <a className="mono" href={`#/claims/${claim.claim_id}`}>
+            {claim.claim_id}
+          </a>
+          <span>{claim.summary}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
 function RunDetails({ run }: Readonly<{ run: Run | null }>) {
   if (run === null)
-    return (
-      <p className="muted">
-        The agent hasn't run on the queue yet. A run starts from the terminal,
-        with <span className="mono">uv run -m agent --cap 5</span>.
-      </p>
-    );
+    return <p className="muted">The agent hasn't worked the queue yet.</p>;
   return (
     <>
       <dl className="facts">
         <dt>State</dt>
         <dd>
-          <span className={`chip chip-${run.status}`}>
-            {run.status === "running" ? "Running" : "Finished"}
-          </span>
+          <RunChip status={run.status} />
         </dd>
-        <dt>Cap</dt>
+        <dt>At once</dt>
         <dd>
-          <span className="mono">{run.cap}</span> claims
+          <span className="mono">{run.agents_at_once}</span> claim agents
         </dd>
         <dt>Started</dt>
         <dd>{formatTime(run.started_at)}</dd>
         {run.finished_at && (
           <>
-            <dt>Finished</dt>
+            <dt>Ended</dt>
             <dd>{formatTime(run.finished_at)}</dd>
           </>
         )}
       </dl>
-      <TodoList run={run} />
-      {run.summary && (
-        <>
-          <h3>Summary</h3>
-          <p className="prose">{run.summary}</p>
-        </>
-      )}
+      <RunClaims run={run} />
     </>
   );
 }
 
 export function RunPanel() {
-  const { data: run, error } = useResource(endpoints.latestRun, 2000);
+  const { data: run, error } = useResource(endpoints.latestDispatch, 2000);
   return (
     <section className="panel" aria-label="The agent's run">
       <h2>The agent's run</h2>
