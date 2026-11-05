@@ -240,8 +240,12 @@ def test_model_name(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.delenv("MODEL_NAME", raising=False)
     default = harness.model()
-    assert default.model_name == "deepseek/deepseek-v4.1-flash"
+    assert default.model_name == "openai/gpt-6-luna"
     assert default.reasoning_effort == "low"
     assert default.max_retries == 0
+    assert harness.model_settings() == ("openai/gpt-6-luna", "low")
     monkeypatch.setenv("MODEL_NAME", "openrouter/free")
-    assert harness.model().model_name == "openrouter/free"
+    chosen = harness.model()
+    assert chosen.model_name == "openrouter/free"
+    assert chosen.reasoning_effort is None
+    assert harness.model_settings() == ("openrouter/free", "none")

@@ -38,6 +38,17 @@ class FlakyModel(StubModel):
         return super()._generate(messages, stop, run_manager, **kwargs)
 
 
+class FailingModel(StubModel):
+    """A chat model that gives its scripted replies, then always fails."""
+
+    replies: int = 0
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        if len(self.prompts) >= self.replies:
+            raise RuntimeError("The model is unavailable.")
+        return super()._generate(messages, stop, run_manager, **kwargs)
+
+
 class StoppingModel(StubModel):
     """A chat model that stops the process, as Ctrl-C or a kill would, once it
     has given `replies` scripted replies."""
@@ -50,9 +61,23 @@ class StoppingModel(StubModel):
         return super()._generate(messages, stop, run_manager, **kwargs)
 
 
+def usage(prompt_tokens=1000, completion_tokens=100, cost=0.002):
+    """The usage OpenRouter reports on a reply, as `ChatOpenAI` passes it on."""
+    return {
+        "token_usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+            "cost": cost,
+        }
+    }
+
+
 def call(name, **args):
     return AIMessage(
-        content="", tool_calls=[{"name": name, "args": args, "id": str(uuid4())}]
+        content="",
+        tool_calls=[{"name": name, "args": args, "id": str(uuid4())}],
+        response_metadata=usage(),
     )
 
 

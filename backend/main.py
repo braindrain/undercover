@@ -2,7 +2,6 @@
 
 import logging
 from collections.abc import Iterator
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
 from uuid import uuid4
@@ -10,7 +9,7 @@ from uuid import uuid4
 import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import Connection, Table, delete, func, insert, select, update
+from sqlalchemy import Connection, delete, func, insert, select, update
 
 from backend import agent_client, db, documents, payout
 from backend.documents import DocumentName
@@ -21,11 +20,13 @@ from backend.models import (
     Customer,
     Handler,
     NewDecision,
+    NewModelCall,
     NewPayment,
     NewPayout,
     NewRun,
     NewSignOff,
     NewStep,
+    NewWork,
     Payout,
     Policy,
     PreviousClaim,
@@ -36,6 +37,7 @@ from backend.models import (
     Todo,
     TodoList,
 )
+from backend.records import find, lookup, now
 
 INSTRUCTIONS = Path(__file__).parent / "instructions"
 MAX_FAILURES = 2
@@ -58,21 +60,6 @@ def database() -> Iterator[Connection]:
 Database = Annotated[Connection, Depends(database, scope="function")]
 
 
-def lookup(conn: Connection, table: Table, record_id: str | int) -> dict | None:
-    """Return one row by its id, or None."""
-    [key] = table.primary_key.columns
-    row = conn.execute(select(table).where(key == record_id)).mappings().first()
-    return dict(row) if row else None
-
-
-def find(conn: Connection, table: Table, record_id: str | int) -> dict:
-    """Return one row by its id, or raise a 404."""
-    row = lookup(conn, table, record_id)
-    if row is None:
-        raise HTTPException(404, f"There is no record {record_id}.")
-    return row
-
-
 def load_claim(conn: Connection, claim_id: str) -> Claim:
     """Return a claim with its decision, payment and sign-off."""
     row = find(conn, db.claims, claim_id)
@@ -87,11 +74,6 @@ def load_claim(conn: Connection, claim_id: str) -> Claim:
             "sign_off": lookup(conn, db.sign_offs, claim_id),
         }
     )
-
-
-def now() -> str:
-    """Return the time now in UTC, to the second."""
-    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def money(amount: float) -> str:
@@ -304,6 +286,28 @@ def list_steps(claim_id: str, conn: Database) -> list[Step]:
         .order_by(db.steps.c.step_id)
     ).mappings()
     return [Step.model_validate(dict(row)) for row in rows]
+
+
+@app.post(
+    "/api/claims/{claim_id}/model-calls",
+    operation_id="record_model_call",
+    status_code=204,
+)
+def record_model_call(claim_id: str, call: NewModelCall, conn: Database) -> None:
+    """Record one model call on a claim, with its run, tokens, cost and seconds."""
+    find(conn, db.claims, claim_id)
+    conn.execute(
+        insert(db.model_calls).values(
+            claim_id=claim_id, **call.model_dump(), created_at=now()
+        )
+    )
+
+
+@app.post("/api/claims/{claim_id}/work", operation_id="record_work", status_code=204)
+def record_work(claim_id: str, work: NewWork, conn: Database) -> None:
+    """Record one stretch of the agent's work on a claim, with its run."""
+    find(conn, db.claims, claim_id)
+    conn.execute(insert(db.work_times).values(claim_id=claim_id, **work.model_dump()))
 
 
 @app.post("/api/claims/{claim_id}/decision", operation_id="record_decision")

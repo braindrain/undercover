@@ -91,6 +91,29 @@ def record_step(claim_id: str, kind: str, text: str) -> None:
     request("POST", f"/api/claims/{claim_id}/steps", json={"kind": kind, "text": text})
 
 
+def record_model_call(
+    claim_id: str, run_id: str | None, usage: dict, seconds: float
+) -> None:
+    body = {"run_id": run_id, **usage, "seconds": seconds}
+    request("POST", f"/api/claims/{claim_id}/model-calls", json=body)
+
+
+def record_work(
+    claim_id: str,
+    run_id: str | None,
+    started_at: str,
+    finished_at: str,
+    seconds: float,
+) -> None:
+    body = {
+        "run_id": run_id,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "seconds": seconds,
+    }
+    request("POST", f"/api/claims/{claim_id}/work", json=body)
+
+
 def record_decision(
     claim_id: str, decision: str, payout: float, reasons: str, policy_section: str
 ) -> dict:

@@ -43,6 +43,8 @@ def test_every_table_is_in_the_metadata():
         "decisions",
         "payments",
         "sign_offs",
+        "model_calls",
+        "work_times",
         "runs",
         "todos",
     }

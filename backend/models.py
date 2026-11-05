@@ -156,6 +156,21 @@ class NewStep(BaseModel):
     text: str
 
 
+class NewModelCall(BaseModel):
+    run_id: str | None
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    cost: float = Field(ge=0)
+    seconds: float = Field(ge=0)
+
+
+class NewWork(BaseModel):
+    run_id: str | None
+    started_at: str
+    finished_at: str
+    seconds: float = Field(ge=0)
+
+
 class NewDecision(BaseModel):
     decision: Literal["approve", "decline", "refer"]
     payout: float = Field(ge=0)

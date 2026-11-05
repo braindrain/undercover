@@ -5,7 +5,9 @@ sign-off when the backend says so, pays an approval, and carries on after a stop
 from collections.abc import Iterator
 from contextvars import Context
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import partial
+from time import monotonic
 from typing import Annotated, Any, TypedDict
 
 from langchain.agents import create_agent
@@ -48,11 +50,14 @@ def queue_call_limit(cap: int) -> int:
 
 @dataclass
 class ClaimContext:
-    """What every node of the claim graph shares during one run: the model with
-    the claim tools, and the claim instructions."""
+    """What every node of the claim graph shares during one stretch of work: the
+    model with the claim tools, the claim instructions, and the dispatch or
+    evaluation it belongs to, if any. It's kept out of the graph's state, which is
+    saved, so that a claim carried on in a later run charges that run."""
 
     model: Runnable[LanguageModelInput, AIMessage]
     instructions: SystemMessage
+    run_id: str | None
 
 
 TOOL_NODE = ToolNode(CLAIM_TOOLS, handle_tool_errors=harness.tool_error)
@@ -71,7 +76,11 @@ def agent(state: ClaimState, runtime: Runtime[ClaimContext]) -> dict[str, Any]:
             f"The claim agent reached its limit of {CLAIM_CALL_LIMIT} model calls."
         )
     context = runtime.context
+    started = monotonic()
     reply = context.model.invoke([context.instructions, *state["messages"]])
+    api.record_model_call(
+        state["claim_id"], context.run_id, harness.usage(reply), monotonic() - started
+    )
     record(state["claim_id"], harness.reply_steps(reply))
     return {"messages": [reply], "model_calls": state["model_calls"] + 1}
 
@@ -139,16 +148,27 @@ def claim_graph() -> CompiledStateGraph[ClaimState, ClaimContext]:
     return builder.compile(checkpointer=harness.checkpointer())
 
 
-def run_thread(claim: dict, start: Any, llm: BaseChatModel | None) -> str:
+def time_now() -> str:
+    """Return the time now in UTC, for a record of work."""
+    return datetime.now(UTC).isoformat(timespec="microseconds")
+
+
+def run_thread(
+    claim: dict, start: Any, llm: BaseChatModel | None, run_id: str | None
+) -> str:
     """Run the claim graph on the claim's thread from `start` and return the
-    agent's last reply. A claim that fails with an error, or ends without a
-    decision, is released, which counts a failure on it; a stop leaves it as is."""
+    agent's last reply, recording the stretch of work, so that a wait for a
+    sign-off between two stretches is never counted. A claim that fails with an
+    error, or ends without a decision, is released, which counts a failure on it;
+    a stop leaves it as is."""
     claim_id = claim["claim_id"]
     context = ClaimContext(
         model=(llm or harness.model()).bind_tools(CLAIM_TOOLS),
         instructions=SystemMessage(api.get_instructions("claim")),
+        run_id=run_id,
     )
     config = harness.thread_config(claim["thread_id"])
+    started_at, started = time_now(), monotonic()
     try:
         # A fresh context makes each claim a trace of its own in Langfuse, with
         # its session, even when the queue agent's tool hands it out.
@@ -159,20 +179,26 @@ def run_thread(claim: dict, start: Any, llm: BaseChatModel | None) -> str:
         api.record_step(claim_id, "error", f"The agent stopped: {error}")
         api.release_claim(claim_id)
         raise
+    finally:
+        api.record_work(claim_id, run_id, started_at, time_now(), monotonic() - started)
     if api.get_claim(claim_id)["decision"] is None:
         api.release_claim(claim_id)
     return str(result["messages"][-1].text)
 
 
-def work_claim(claim_id: str, llm: BaseChatModel | None = None) -> str:
+def work_claim(
+    claim_id: str, llm: BaseChatModel | None = None, run_id: str | None = None
+) -> str:
     """Start a waiting claim on a new thread and work it from a clean start."""
     claim = api.start_claim(claim_id)
     task = HumanMessage(f"Decide claim {claim_id}.")
     start = {"messages": [task], "claim_id": claim_id, "model_calls": 0}
-    return run_thread(claim, start, llm)
+    return run_thread(claim, start, llm, run_id)
 
 
-def carry_on(claim_id: str, llm: BaseChatModel | None = None) -> str:
+def carry_on(
+    claim_id: str, llm: BaseChatModel | None = None, run_id: str | None = None
+) -> str:
     """Carry on a claim in progress from where its thread got to: with the
     handler's sign-off if it was waiting for one, from its last step if it was
     stopped, or from the start if it was stopped before its first step."""
@@ -189,7 +215,7 @@ def carry_on(claim_id: str, llm: BaseChatModel | None = None) -> str:
         start = {"messages": [task], "claim_id": claim["claim_id"], "model_calls": 0}
     else:
         return f"{claim['claim_id']} has nothing left to do."
-    return run_thread(claim, start, llm)
+    return run_thread(claim, start, llm, run_id)
 
 
 def carry_on_stopped(llm: BaseChatModel | None = None) -> Iterator[str]:

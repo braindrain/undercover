@@ -91,6 +91,28 @@ sign_offs = Table(
     Column("handler_id", String, nullable=False),
     Column("signed_off_at", String, nullable=False),
 )
+model_calls = Table(
+    "model_calls",
+    metadata,
+    Column("call_id", Integer, primary_key=True, autoincrement=True),
+    Column("claim_id", String, nullable=False),
+    Column("run_id", String),
+    Column("input_tokens", Integer, nullable=False),
+    Column("output_tokens", Integer, nullable=False),
+    Column("cost", Float, nullable=False),
+    Column("seconds", Float, nullable=False),
+    Column("created_at", String, nullable=False),
+)
+work_times = Table(
+    "work_times",
+    metadata,
+    Column("work_id", Integer, primary_key=True, autoincrement=True),
+    Column("claim_id", String, nullable=False),
+    Column("run_id", String),
+    Column("started_at", String, nullable=False),
+    Column("finished_at", String, nullable=False),
+    Column("seconds", Float, nullable=False),
+)
 runs = Table(
     "runs",
     metadata,

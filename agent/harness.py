@@ -35,7 +35,9 @@ from pydantic import SecretStr
 from agent.api import Refused
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
+DEFAULT_MODEL = "openai/gpt-6-luna"
+DEFAULT_EFFORT = "low"
+NO_EFFORT = "none"
 MODEL_RETRIES = 3
 TOOL_RETRIES = 2
 RETRY_DELAY = 1.0
@@ -46,20 +48,38 @@ ToolHandler = Callable[[ToolCallRequest], ToolMessage | Command[Any]]
 Step = tuple[str, str]
 
 
+def model_settings() -> tuple[str, str]:
+    """Return the model's name and reasoning effort: the one in MODEL_NAME with no
+    effort set, or GPT-6 Luna with low effort by default."""
+    name = os.getenv("MODEL_NAME")
+    return (name, NO_EFFORT) if name else (DEFAULT_MODEL, DEFAULT_EFFORT)
+
+
 def model() -> ChatOpenAI:
-    """Return the model named in MODEL_NAME, or DeepSeek V4.1 Flash by default.
+    """Return the model in `model_settings`.
 
     The client doesn't retry, so that the harness's retries are the one policy.
     """
-    name = os.getenv("MODEL_NAME")
+    name, effort = model_settings()
     return ChatOpenAI(
-        model=name or DEFAULT_MODEL,
+        model=name,
         base_url=OPENROUTER_BASE_URL,
         api_key=SecretStr(os.environ["OPENROUTER_API_KEY"]),
-        reasoning_effort=None if name else "low",
+        reasoning_effort=None if effort == NO_EFFORT else effort,
         timeout=120,
         max_retries=0,
     )
+
+
+def usage(reply: AIMessage) -> dict[str, Any]:
+    """Return the tokens and the cost OpenRouter reported on a model's reply. A
+    model that reports none, as a free one may, counts as zero."""
+    reported = reply.response_metadata.get("token_usage") or {}
+    return {
+        "input_tokens": reported.get("prompt_tokens") or 0,
+        "output_tokens": reported.get("completion_tokens") or 0,
+        "cost": reported.get("cost") or 0.0,
+    }
 
 
 def tracing_on() -> bool:
