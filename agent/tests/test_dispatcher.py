@@ -51,8 +51,8 @@ def keep_only(*claim_ids):
 def swarm(monkeypatch):
     """Give every claim agent one shared stub model, built from scripts."""
 
-    def use(scripts=None, together=1):
-        model = swarm_model(scripts, together)
+    def use(scripts=None, together=1, default=None):
+        model = swarm_model(scripts, together, default)
         monkeypatch.setattr(harness, "model", lambda: model)
         return model
 

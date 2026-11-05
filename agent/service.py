@@ -1,6 +1,6 @@
 """The UnderCover Agent's web service, its entry point beside the backend: the
 backend asks it to work a claim, to carry one on after a sign-off, and to start a
-dispatch. It runs one dispatch at a time, in a thread of its own."""
+dispatch or an evaluation. It runs one of those at a time, in a thread of its own."""
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -55,6 +55,12 @@ class NewDispatch(BaseModel):
     agents_at_once: int
 
 
+class NewEvaluation(BaseModel):
+    agents_at_once: int
+    claim_set: str
+    tiny: bool
+
+
 def in_background(work: Callable[[], None]) -> None:
     """Do a run's work, then free the run slot, whatever happens."""
     try:
@@ -97,3 +103,16 @@ def carry_on_claim(claim_id: str, background: BackgroundTasks) -> Accepted:
 def start_dispatch(new_dispatch: NewDispatch) -> Started:
     """Start a dispatch in the background, or refuse while a run is going."""
     return start_run(partial(dispatcher.dispatch, new_dispatch.agents_at_once))
+
+
+@app.post("/evaluations", operation_id="start_evaluation", status_code=202)
+def start_evaluation(new_evaluation: NewEvaluation) -> Started:
+    """Start an evaluation in the background, or refuse while a run is going."""
+    return start_run(
+        partial(
+            dispatcher.evaluate,
+            new_evaluation.agents_at_once,
+            new_evaluation.claim_set,
+            new_evaluation.tiny,
+        )
+    )

@@ -11,6 +11,7 @@ StepKind = Literal["tool_call", "tool_result", "read", "reply", "error"]
 RunKind = Literal["dispatch", "evaluation"]
 RunEnd = Literal["finished", "stopped"]
 RunStatus = Literal["running", "finished", "stopped"]
+ClaimSet = Literal["evaluation", "held_out"]
 Benefit = Literal[
     "trip_cancellation",
     "trip_interruption",
@@ -208,7 +209,7 @@ class Run(BaseModel):
     run_id: str
     kind: RunKind
     agents_at_once: int
-    claim_set: str | None
+    claim_set: ClaimSet | None
     tiny: bool | None
     model: str
     reasoning_effort: str
@@ -262,6 +263,12 @@ class StartDispatch(BaseModel):
     agents_at_once: AgentsAtOnce
 
 
+class StartEvaluation(BaseModel):
+    agents_at_once: AgentsAtOnce
+    claim_set: ClaimSet
+    tiny: bool
+
+
 class Started(BaseModel):
     status: str
 
@@ -270,6 +277,16 @@ class NewDispatch(BaseModel):
     agents_at_once: AgentsAtOnce
     model: str = Field(min_length=1)
     reasoning_effort: str = Field(min_length=1)
+
+
+class NewEvaluation(NewDispatch):
+    claim_set: ClaimSet
+    tiny: bool
+
+
+class ClaimEvaluation(BaseModel):
+    evaluation_id: str
+    source_claim_id: str
 
 
 class RunResult(BaseModel):

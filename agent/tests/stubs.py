@@ -93,16 +93,17 @@ class Gauge:
 class SwarmModel(StubModel):
     """A chat model for many claims at once. Each claim follows its own script of
     replies, and an exception in a script is raised in its turn. A claim with no
-    script declines."""
+    script gets the `default` one, which declines unless a test says otherwise."""
 
     scripts: dict = {}
     gauge: Any = None
+    default: Any = None
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         claim_id = str(messages[1].content).split()[-1].rstrip(".")
         self.prompts.append(messages)
         self.gauge.enter()
-        script = self.scripts.setdefault(claim_id, declines(claim_id))
+        script = self.scripts.setdefault(claim_id, self.default(claim_id))
         reply = script.pop(0)
         self.gauge.leave()
         if isinstance(reply, BaseException):
@@ -110,8 +111,13 @@ class SwarmModel(StubModel):
         return ChatResult(generations=[ChatGeneration(message=reply)])
 
 
-def swarm_model(scripts=None, together=1):
-    return SwarmModel(messages=iter([]), scripts=scripts or {}, gauge=Gauge(together))
+def swarm_model(scripts=None, together=1, default=None):
+    return SwarmModel(
+        messages=iter([]),
+        scripts=scripts or {},
+        gauge=Gauge(together),
+        default=default or declines,
+    )
 
 
 def usage(prompt_tokens=1000, completion_tokens=100, cost=0.002):

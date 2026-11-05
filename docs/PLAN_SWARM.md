@@ -368,18 +368,18 @@ Seed the answer key and work copies of a labelled set through the same dispatche
 
 Success criteria:
 
-- [ ] Seeding: the queue still holds exactly the 25 claims in `data/claims.json`; `held_out_claims` holds 25; `handler_decisions` holds 50, with five `tiny` in each set; and seeding reads only `decisions.json`, `held_out_claims.json` and `held_out_decisions.json` under `data/evals/`, never `harder/` or `even_harder/`
-- [ ] Tests pass for the copies: each set gives 25, and `tiny` gives its five; each copy has a new id in its row and in its record, so `get_claim` returns the copy's id; and a queue claim already decided copies clean
-- [ ] `get_claim` on a copy has exactly the same fields as on a queue claim, and holds nothing from the handlers' decisions: no reason, calculation, tags or handler, and no field that names the evaluation
-- [ ] A structure test: `handler_decisions` and `held_out_claims` are named only in `backend/db.py` and `backend/evaluations.py`, and `agent/api.py` calls neither `get_evaluation` nor `list_evaluations`
-- [ ] A stub-model evaluation at N=5 leaves `list_claims` exactly as it was, with the same statuses and counts, and the run `finished`
-- [ ] In that evaluation, a copy approved over the limit counts as finished; the run doesn't wait for it; its thread has no saved state; and it has no payment
-- [ ] A later dispatch never picks up a copy, including one left in progress by a stopped evaluation
-- [ ] `sign_off_claim` and `run_agent` on a copy return `409` and change nothing
-- [ ] A rate limit and a failure behave in an evaluation as in a dispatch, and cost and time are recorded under the evaluation
-- [ ] The service refuses an evaluation while a dispatch runs, and a dispatch while an evaluation runs; an evaluation still running when the service starts shows as stopped; an evaluation records its set, N, model and effort
-- [ ] Vitest tests pass for a copy's page: a note with the link back, and no "Run the agent" or sign-off form, even at `awaiting_sign_off`
-- [ ] `npm run check` passes with coverage at or above 80%
+- [x] Seeding: the queue still holds exactly the 25 claims in `data/claims.json`; `held_out_claims` holds 25; `handler_decisions` holds 50, with five `tiny` in each set; and seeding reads only `decisions.json`, `held_out_claims.json` and `held_out_decisions.json` under `data/evals/`, never `harder/` or `even_harder/`
+- [x] Tests pass for the copies: each set gives 25, and `tiny` gives its five; each copy has a new id in its row and in its record, so `get_claim` returns the copy's id; and a queue claim already decided copies clean
+- [x] `get_claim` on a copy has exactly the same fields as on a queue claim, and holds nothing from the handlers' decisions: no reason, calculation, tags or handler, and no field that names the evaluation
+- [x] A structure test: `handler_decisions` and `held_out_claims` are named only in `backend/db.py` and `backend/evaluations.py`, and `agent/api.py` calls neither `get_evaluation` nor `list_evaluations`
+- [x] A stub-model evaluation at N=5 leaves `list_claims` exactly as it was, with the same statuses and counts, and the run `finished`
+- [x] In that evaluation, a copy approved over the limit counts as finished; the run doesn't wait for it; its thread has no saved state; and it has no payment
+- [x] A later dispatch never picks up a copy, including one left in progress by a stopped evaluation
+- [x] `sign_off_claim` and `run_agent` on a copy return `409` and change nothing
+- [x] A rate limit and a failure behave in an evaluation as in a dispatch, and cost and time are recorded under the evaluation
+- [x] The service refuses an evaluation while a dispatch runs, and a dispatch while an evaluation runs; an evaluation still running when the service starts shows as stopped; an evaluation records its set, N, model and effort
+- [x] Vitest tests pass for a copy's page: a note with the link back, and no "Run the agent" or sign-off form, even at `awaiting_sign_off`
+- [x] `npm run check` passes with coverage at or above 80%
 
 ## Phase 5: The scoreboard
 

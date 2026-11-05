@@ -12,6 +12,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     Column,
+    Connection,
     Engine,
     Float,
     Integer,
@@ -56,11 +57,14 @@ claims = Table(
     Column("failures", Integer, nullable=False),
     Column("thread_id", String),
     Column("submitted_on", String, nullable=False),
+    Column("evaluation_id", String),
+    Column("source_claim_id", String),
     Column("data", JSON, nullable=False),
 )
 policies = record_table("policies", "policy_id")
 customers = record_table("customers", "customer_id")
 handlers = record_table("handlers", "handler_id")
+held_out_claims = record_table("held_out_claims", "claim_id")
 steps = Table(
     "steps",
     metadata,
@@ -139,12 +143,26 @@ run_claims = Table(
     Column("claim_id", String, primary_key=True),
     Column("position", Integer, nullable=False),
 )
+handler_decisions = Table(
+    "handler_decisions",
+    metadata,
+    Column("claim_id", String, primary_key=True),
+    Column("claim_set", String, nullable=False),
+    Column("decision", String, nullable=False),
+    Column("payout", Float, nullable=False),
+    Column("tiny", Boolean, nullable=False),
+)
 
 RECORDS = {
     "policies.json": (policies, "policy_id"),
     "customers.json": (customers, "customer_id"),
     "handlers.json": (handlers, "handler_id"),
 }
+ANSWER_KEY = {
+    "evaluation": "evals/decisions.json",
+    "held_out": "evals/held_out_decisions.json",
+}
+HELD_OUT_CLAIMS = "evals/held_out_claims.json"
 
 
 def read_data(name: str) -> str:
@@ -195,8 +213,35 @@ def engine() -> Engine:
         return engine_for(database_url())
 
 
+def seed_evaluations(conn: Connection) -> None:
+    """Load the held-out claims, out of the queue, and the handlers' decisions, in
+    tables of their own that no claim operation reads."""
+    held_out = json.loads(read_data(HELD_OUT_CLAIMS))
+    for claim in held_out:
+        claim.pop("status")
+    conn.execute(
+        insert(held_out_claims),
+        [{"claim_id": claim["claim_id"], "data": claim} for claim in held_out],
+    )
+    for claim_set, name in ANSWER_KEY.items():
+        conn.execute(
+            insert(handler_decisions),
+            [
+                {
+                    "claim_id": decision["claim_id"],
+                    "claim_set": claim_set,
+                    "decision": decision["decision"],
+                    "payout": decision["payout"],
+                    "tiny": decision["tiny"],
+                }
+                for decision in json.loads(read_data(name))
+            ],
+        )
+
+
 def seed(target: Engine) -> None:
-    """Create the tables and load the claims queue and the records behind it."""
+    """Create the tables and load the claims queue, the records behind it and the
+    evaluation sets."""
     with target.begin() as conn:
         if target.dialect.name == "postgresql":
             conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
@@ -227,6 +272,7 @@ def seed(target: Engine) -> None:
                     insert(table),
                     [{key: record[key], "data": record} for record in records],
                 )
+        seed_evaluations(conn)
 
 
 def reset() -> str:

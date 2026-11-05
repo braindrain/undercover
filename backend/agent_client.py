@@ -39,3 +39,8 @@ def carry_on(claim_id: str) -> None:
 
 def start_dispatch(agents_at_once: int) -> None:
     request("/dispatches", {"agents_at_once": agents_at_once})
+
+
+def start_evaluation(agents_at_once: int, claim_set: str, tiny: bool) -> None:
+    body = {"agents_at_once": agents_at_once, "claim_set": claim_set, "tiny": tiny}
+    request("/evaluations", body)

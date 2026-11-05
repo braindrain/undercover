@@ -129,6 +129,23 @@ def create_dispatch(agents_at_once: int, model: str, reasoning_effort: str) -> d
     return request("POST", "/api/dispatches", json=body).json()
 
 
+def create_evaluation(
+    agents_at_once: int,
+    claim_set: str,
+    tiny: bool,
+    model: str,
+    reasoning_effort: str,
+) -> dict:
+    body = {
+        "agents_at_once": agents_at_once,
+        "claim_set": claim_set,
+        "tiny": tiny,
+        "model": model,
+        "reasoning_effort": reasoning_effort,
+    }
+    return request("POST", "/api/evaluations", json=body).json()
+
+
 def list_run_claims(run_id: str) -> list[str]:
     return request("GET", f"/api/runs/{run_id}/claims").json()
 

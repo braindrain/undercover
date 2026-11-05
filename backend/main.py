@@ -12,19 +12,21 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import Connection, insert, select, update
 
-from backend import agent_client, db, documents, payout, runs
+from backend import agent_client, db, documents, evaluations, payout, runs
 from backend.documents import DocumentName
 from backend.models import (
     FEWEST_AGENTS,
     MOST_AGENTS,
     STARTING_AGENTS,
     Claim,
+    ClaimEvaluation,
     ClaimSummary,
     Contents,
     Customer,
     Handler,
     NewDecision,
     NewDispatch,
+    NewEvaluation,
     NewModelCall,
     NewPayment,
     NewPayout,
@@ -40,6 +42,7 @@ from backend.models import (
     RunResult,
     StartDispatch,
     Started,
+    StartEvaluation,
     Status,
     Step,
 )
@@ -101,6 +104,14 @@ def require_status(claim: Claim, status: Status, action: str) -> None:
         )
 
 
+def refuse_a_copy(conn: Connection, claim_id: str, action: str) -> None:
+    """Refuse an action on an evaluation's copy, which only the evaluation works."""
+    if find(conn, db.claims, claim_id)["evaluation_id"]:
+        raise HTTPException(
+            409, f"{claim_id} is a copy in an evaluation, so it can't be {action}."
+        )
+
+
 def update_claim(conn: Connection, claim_id: str, **values: object) -> None:
     """Change a claim's status, failures or thread."""
     conn.execute(
@@ -132,6 +143,7 @@ def list_claims(conn: Database) -> list[ClaimSummary]:
         )
         .join(db.customers, db.customers.c.customer_id == db.claims.c.customer_id)
         .outerjoin(db.decisions, db.decisions.c.claim_id == db.claims.c.claim_id)
+        .where(db.claims.c.evaluation_id.is_(None))
         .order_by(db.claims.c.claim_id)
     ).mappings()
     return [
@@ -150,6 +162,17 @@ def list_claims(conn: Database) -> list[ClaimSummary]:
 def get_claim(claim_id: str, conn: Database) -> Claim:
     """Return one claim in full, with the agent's decision."""
     return load_claim(conn, claim_id)
+
+
+@app.get("/api/claims/{claim_id}/evaluation", operation_id="get_claim_evaluation")
+def get_claim_evaluation(claim_id: str, conn: Database) -> ClaimEvaluation | None:
+    """Return the evaluation a copy belongs to, or null for a claim in the queue."""
+    row = find(conn, db.claims, claim_id)
+    if row["evaluation_id"] is None:
+        return None
+    return ClaimEvaluation(
+        evaluation_id=row["evaluation_id"], source_claim_id=row["source_claim_id"]
+    )
 
 
 @app.get("/api/policies/{policy_id}", operation_id="get_policy")
@@ -371,6 +394,7 @@ def sign_off_claim(
     claim_id: str, sign_off: NewSignOff, background: BackgroundTasks, conn: Database
 ) -> Claim:
     """Sign off an approval over the limit, for the agent to pay."""
+    refuse_a_copy(conn, claim_id, "signed off")
     require_status(load_claim(conn, claim_id), "awaiting_sign_off", "signed off")
     handler = Handler(**find(conn, db.handlers, sign_off.handler_id)["data"])
     if not handler.can_approve_over_limit:
@@ -410,6 +434,7 @@ def ask_agent_to_carry_on(claim_id: str) -> None:
 @app.post("/api/claims/{claim_id}/run", operation_id="run_agent", status_code=202)
 def run_agent(claim_id: str, conn: Database) -> Claim:
     """Ask the agent's service to work a waiting claim, in the background."""
+    refuse_a_copy(conn, claim_id, "run")
     claim = load_claim(conn, claim_id)
     require_status(claim, "waiting", "run")
     ask_agent(partial(agent_client.work, claim_id))
@@ -437,6 +462,26 @@ def start_dispatch(start: StartDispatch) -> Started:
 def create_dispatch(new_dispatch: NewDispatch, conn: Database) -> Run:
     """Record a dispatch and choose its claims, for the agent's service."""
     return runs.create_dispatch(conn, new_dispatch)
+
+
+@app.post("/api/evaluations/start", operation_id="start_evaluation", status_code=202)
+def start_evaluation(start: StartEvaluation) -> Started:
+    """Ask the agent's service to start an evaluation, writing nothing here first."""
+    ask_agent(
+        partial(
+            agent_client.start_evaluation,
+            start.agents_at_once,
+            start.claim_set,
+            start.tiny,
+        )
+    )
+    return Started(status="accepted")
+
+
+@app.post("/api/evaluations", operation_id="create_evaluation")
+def create_evaluation(new_evaluation: NewEvaluation, conn: Database) -> Run:
+    """Record an evaluation and make its copies, for the agent's service."""
+    return evaluations.create_evaluation(conn, new_evaluation)
 
 
 @app.get("/api/dispatches/latest", operation_id="get_latest_dispatch")

@@ -242,10 +242,15 @@ def carry_on(
 def work(claim_id: str, run: dict) -> str:
     """Work one claim of a run: the only way the dispatcher reaches the claim
     agent. A waiting claim starts, a claim in progress carries on, and any other
-    has nothing to do."""
+    has nothing to do. An evaluation's copy can't be signed off, so an approval
+    held for one counts as finished, and its saved progress is cleared."""
     status = api.get_claim(claim_id)["status"]
     if status == "waiting":
-        return work_claim(claim_id, run_id=run["run_id"])
-    if status == "in_progress":
-        return carry_on(claim_id, run_id=run["run_id"])
-    return f"{claim_id} is {status}, so there's nothing to do."
+        result = work_claim(claim_id, run_id=run["run_id"])
+    elif status == "in_progress":
+        result = carry_on(claim_id, run_id=run["run_id"])
+    else:
+        return f"{claim_id} is {status}, so there's nothing to do."
+    if run["kind"] == "evaluation":
+        harness.clear_thread(api.get_claim(claim_id)["thread_id"])
+    return result

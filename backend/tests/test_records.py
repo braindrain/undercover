@@ -21,11 +21,20 @@ def test_list_claims_is_the_queue():
     assert claims[0]["decision"] is None
 
 
-def test_seed_reads_nothing_from_evals(monkeypatch):
+def test_seed_reads_only_the_three_files_it_needs_from_evals(monkeypatch):
     read = []
-    monkeypatch.setattr(db, "read_data", lambda name: read.append(name) or "[]")
+    real = db.read_data
+    monkeypatch.setattr(db, "read_data", lambda name: read.append(name) or real(name))
     db.reset()
-    assert read == ["claims.json", "policies.json", "customers.json", "handlers.json"]
+    assert read == [
+        "claims.json",
+        "policies.json",
+        "customers.json",
+        "handlers.json",
+        "evals/held_out_claims.json",
+        "evals/decisions.json",
+        "evals/held_out_decisions.json",
+    ]
 
 
 def test_reset_starts_again(tmp_path):

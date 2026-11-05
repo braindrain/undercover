@@ -90,3 +90,9 @@ def work_run(run: dict) -> None:
 def dispatch(agents_at_once: int) -> None:
     """Create a dispatch through the backend and work it."""
     work_run(api.create_dispatch(agents_at_once, *harness.model_settings()))
+
+
+def evaluate(agents_at_once: int, claim_set: str, tiny: bool) -> None:
+    """Create an evaluation through the backend and work its copies."""
+    settings = harness.model_settings()
+    work_run(api.create_evaluation(agents_at_once, claim_set, tiny, *settings))

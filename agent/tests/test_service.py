@@ -108,6 +108,41 @@ def test_a_failure_in_the_background_marks_the_run_as_stopped(monkeypatch):
     assert latest()["status"] == "stopped"
 
 
+def test_an_evaluation_starts_with_its_set(monkeypatch):
+    started = []
+    monkeypatch.setattr(
+        dispatcher, "evaluate", lambda *settings: started.append(settings)
+    )
+    response = client.post(
+        "/evaluations",
+        json={"agents_at_once": 5, "claim_set": "held_out", "tiny": True},
+    )
+    assert response.status_code == 202
+    free_slot()
+    assert started == [(5, "held_out", True)]
+
+
+def test_a_dispatch_and_an_evaluation_refuse_each_other(held_dispatch):
+    _, release, _ = held_dispatch
+    client.post("/dispatches", json={"agents_at_once": 1})
+    evaluation = {"agents_at_once": 5, "claim_set": "held_out", "tiny": True}
+    assert client.post("/evaluations", json=evaluation).status_code == 409
+    release.set()
+    free_slot()
+
+
+def test_a_dispatch_is_refused_while_an_evaluation_runs(monkeypatch):
+    release = Event()
+    monkeypatch.setattr(dispatcher, "evaluate", lambda *settings: release.wait(5))
+    client.post(
+        "/evaluations",
+        json={"agents_at_once": 5, "claim_set": "evaluation", "tiny": False},
+    )
+    assert client.post("/dispatches", json={"agents_at_once": 1}).status_code == 409
+    release.set()
+    free_slot()
+
+
 def create_dispatch():
     return api.create_dispatch(3, "openai/gpt-6-luna", "low")
 
@@ -118,6 +153,17 @@ def test_the_start_marks_any_running_dispatch_as_stopped():
         pass
     assert latest()["run_id"] == run["run_id"]
     assert latest()["status"] == "stopped"
+
+
+def test_the_start_marks_any_running_evaluation_as_stopped():
+    run = api.create_evaluation(5, "held_out", True, "openai/gpt-6-luna", "low")
+    with TestClient(service.app):
+        pass
+    assert backend_client.post("/api/runs/stop").json() == []
+    finished = backend_client.post(
+        f"/api/runs/{run['run_id']}/finish", json={"status": "finished"}
+    )
+    assert finished.status_code == 409
 
 
 def test_the_start_keeps_trying_until_the_backend_comes(monkeypatch):
@@ -158,6 +204,7 @@ def test_every_operation_follows_the_api_rules():
         "work_claim",
         "carry_on_claim",
         "start_dispatch",
+        "start_evaluation",
     }
     for route in routes:
         assert route.description

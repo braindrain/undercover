@@ -29,12 +29,20 @@ NO_TOTALS = {
 }
 
 
+def new_id(kind: RunKind) -> str:
+    """Return an id for a new run. It's never a count, because it tags traces in
+    Langfuse, which a reseed doesn't clear."""
+    return f"{kind}-{uuid4().hex[:8]}"
+
+
 def create_run(
-    conn: Connection, kind: RunKind, claim_ids: list[str], **settings: object
+    conn: Connection,
+    run_id: str,
+    kind: RunKind,
+    claim_ids: list[str],
+    **settings: object,
 ) -> Run:
-    """Record a run and its claims in order. Its id is new on every run, never a
-    count, because it tags traces in Langfuse, which a reseed doesn't clear."""
-    run_id = f"{kind}-{uuid4().hex[:8]}"
+    """Record a run and its claims in order."""
     conn.execute(
         insert(db.runs).values(
             run_id=run_id, kind=kind, status="running", started_at=now(), **settings
@@ -52,14 +60,23 @@ def create_run(
 
 
 def create_dispatch(conn: Connection, new_dispatch: NewDispatch) -> Run:
-    """Record a dispatch of every claim in progress and every waiting claim, oldest
-    submitted first."""
-    claim_ids = conn.execute(
+    """Record a dispatch of every claim in progress and every waiting claim in the
+    queue, oldest submitted first. An evaluation's copies are never in it."""
+    chosen = conn.execute(
         select(db.claims.c.claim_id)
-        .where(db.claims.c.status.in_(["in_progress", "waiting"]))
+        .where(
+            db.claims.c.status.in_(["in_progress", "waiting"]),
+            db.claims.c.evaluation_id.is_(None),
+        )
         .order_by(db.claims.c.submitted_on, db.claims.c.claim_id)
     ).scalars()
-    return create_run(conn, "dispatch", list(claim_ids), **new_dispatch.model_dump())
+    return create_run(
+        conn,
+        new_id("dispatch"),
+        "dispatch",
+        list(chosen),
+        **new_dispatch.model_dump(),
+    )
 
 
 def claim_ids(conn: Connection, run_id: str) -> list[str]:

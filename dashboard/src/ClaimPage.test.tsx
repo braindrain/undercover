@@ -124,6 +124,7 @@ function routes(current: Claim, claimSteps: Step[] = []): Routes {
   return {
     "/api/claims/CLM-1001": current,
     "/api/claims/CLM-1001/steps": claimSteps,
+    "/api/claims/CLM-1001/evaluation": null,
     "/api/policies/POL-2001": policy,
     "/api/customers/CUS-3001": customer,
     "/api/handlers": handlers,
@@ -350,6 +351,39 @@ it("shows a customer with no earlier claims and a policy with no add-ons", async
   expect(await within(policyPanel).findByText("None")).toBeDefined();
   const customerPanel = await screen.findByRole("region", { name: "Customer" });
   expect(within(customerPanel).getByText("None")).toBeDefined();
+});
+
+const copy = {
+  evaluation_id: "evaluation-3f9a2c1d",
+  source_claim_id: "CLM-1008",
+};
+
+it("says a copy belongs to its evaluation, with a link back", async () => {
+  stubFetch({
+    ...routes(claim({})),
+    "/api/claims/CLM-1001/evaluation": copy,
+  });
+  render(<ClaimPage claimId="CLM-1001" />);
+  const link = await screen.findByRole("link", { name: "evaluation-3f9a2c1d" });
+  expect(link.getAttribute("href")).toBe("#/scoreboard/evaluation-3f9a2c1d");
+  expect(screen.getByText("CLM-1008")).toBeDefined();
+  expect(screen.queryByRole("button", { name: "Run the agent" })).toBeNull();
+});
+
+it("has no sign-off form on a copy held for a sign-off", async () => {
+  stubFetch({
+    ...routes(
+      claim({
+        status: "awaiting_sign_off",
+        decision: { ...decision, payout: 1150 },
+      }),
+    ),
+    "/api/claims/CLM-1001/evaluation": copy,
+  });
+  render(<ClaimPage claimId="CLM-1001" />);
+  await screen.findByRole("link", { name: "evaluation-3f9a2c1d" });
+  expect(screen.queryByRole("region", { name: "Sign-off" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Sign off" })).toBeNull();
 });
 
 it("shows an unknown claim", async () => {

@@ -134,6 +134,43 @@ def test_start_dispatch_keeps_n_within_its_limits(agent_calls):
     assert agent_calls == []
 
 
+def start_evaluation(agents_at_once=5, claim_set="held_out", tiny=True):
+    return client.post(
+        "/api/evaluations/start",
+        json={
+            "agents_at_once": agents_at_once,
+            "claim_set": claim_set,
+            "tiny": tiny,
+        },
+    )
+
+
+def test_start_evaluation_passes_its_settings_and_writes_nothing(agent_calls):
+    assert start_evaluation().status_code == 202
+    assert agent_calls == [
+        ("/evaluations", {"agents_at_once": 5, "claim_set": "held_out", "tiny": True})
+    ]
+    assert client.get("/api/dispatches/latest").json() is None
+
+
+def test_start_evaluation_passes_on_a_refusal(monkeypatch):
+    monkeypatch.setattr(agent_client, "request", refused)
+    assert start_evaluation().status_code == 409
+
+
+def test_start_evaluation_says_when_the_service_isnt_running(monkeypatch):
+    monkeypatch.setattr(agent_client, "request", unreachable)
+    response = start_evaluation()
+    assert response.status_code == 503
+    assert response.json()["detail"] == "The agent's service isn't running."
+
+
+def test_start_evaluation_keeps_to_its_limits(agent_calls):
+    assert start_evaluation(agents_at_once=26).status_code == 422
+    assert start_evaluation(claim_set="harder").status_code == 422
+    assert agent_calls == []
+
+
 def test_get_run_options():
     assert client.get("/api/run-options").json() == {
         "fewest_agents": 1,
@@ -207,6 +244,6 @@ def test_only_the_agent_client_names_the_agents_service(source):
         return
     text = source.read_text(encoding="utf-8")
     assert not re.search(
-        r"[\"']/(claims|dispatches)[/\"']|UNDERCOVER_AGENT|:8002", text
+        r"[\"']/(claims|dispatches|evaluations)[/\"']|UNDERCOVER_AGENT|:8002", text
     )
     assert not re.search(r"^\s*(from|import) agent\b", text, re.MULTILINE)

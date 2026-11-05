@@ -5,6 +5,7 @@ import {
   formatLabel,
   runAgent,
   type Claim,
+  type ClaimEvaluation,
 } from "./api";
 import {
   DecisionPanel,
@@ -52,6 +53,21 @@ function RunButton({
           {error}
         </p>
       )}
+    </section>
+  );
+}
+
+function CopyNote({ copy }: Readonly<{ copy: ClaimEvaluation }>) {
+  return (
+    <section className="panel" aria-label="Evaluation">
+      <p>
+        This is a copy of <span className="mono">{copy.source_claim_id}</span>{" "}
+        in{" "}
+        <a className="mono" href={`#/scoreboard/${copy.evaluation_id}`}>
+          {copy.evaluation_id}
+        </a>
+        . It's worked by the evaluation alone, so it can't be run or signed off.
+      </p>
     </section>
   );
 }
@@ -121,7 +137,9 @@ export function ClaimPage({ claimId }: Readonly<{ claimId: string }>) {
   const live = claim?.status === "waiting" || claim?.status === "in_progress";
   const steps =
     useResource(endpoints.steps(claimId), live ? 2000 : null).data ?? [];
+  const { data: copy } = useResource(endpoints.claimEvaluation(claimId), null);
   if (!claim) return <Loading error={error} />;
+  const inQueue = copy === null;
 
   return (
     <>
@@ -139,11 +157,12 @@ export function ClaimPage({ claimId }: Readonly<{ claimId: string }>) {
           <CustomerPanel customerId={claim.customer_id} />
         </div>
         <div className="column">
-          {claim.status === "waiting" && (
+          {copy && <CopyNote copy={copy} />}
+          {inQueue && claim.status === "waiting" && (
             <RunButton claimId={claimId} onStarted={reload} />
           )}
           <DecisionPanel claim={claim} />
-          {claim.status === "awaiting_sign_off" && (
+          {inQueue && claim.status === "awaiting_sign_off" && (
             <SignOffForm claimId={claimId} onDone={reload} />
           )}
           <ReadPanel steps={steps} />

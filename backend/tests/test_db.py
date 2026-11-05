@@ -67,6 +67,8 @@ def test_every_table_is_in_the_metadata():
         "work_times",
         "runs",
         "run_claims",
+        "held_out_claims",
+        "handler_decisions",
     }
 
 

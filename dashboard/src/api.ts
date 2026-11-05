@@ -66,6 +66,11 @@ export interface Claim {
   sign_off: { handler_id: string; signed_off_at: string } | null;
 }
 
+export interface ClaimEvaluation {
+  evaluation_id: string;
+  source_claim_id: string;
+}
+
 export interface Policy {
   policy_id: string;
   plan: string;
@@ -235,6 +240,8 @@ export const endpoints = {
   claims: json<ClaimSummary[]>("/api/claims"),
   claim: (claimId: string) => json<Claim>(`/api/claims/${claimId}`),
   steps: (claimId: string) => json<Step[]>(`/api/claims/${claimId}/steps`),
+  claimEvaluation: (claimId: string) =>
+    json<ClaimEvaluation | null>(`/api/claims/${claimId}/evaluation`),
   policy: (policyId: string) => json<Policy>(`/api/policies/${policyId}`),
   customer: (customerId: string) =>
     json<Customer>(`/api/customers/${customerId}`),
