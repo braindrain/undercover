@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Improver Loop</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column; each diagram scrolls in its own container at full drawn size. Skin: UnderCover brand mapped to diagram-design roles. */
+:root {
+  --paper: #F0F4F5;
+  --node: #FFFFFF;
+  --ink: #073B4C;
+  --muted: #3F6573;
+  --soft: #4E7280;
+  --accent: #C4264F;
+  --accent-tint: rgba(196, 38, 79, 0.08);
+  --store: rgba(7, 59, 76, 0.05);
+  --rule: rgba(7, 59, 76, 0.16);
+  --rule-strong: rgba(7, 59, 76, 0.28);
+  --panel: #FFFFFF;
+  --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Instrument Serif", Georgia, serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #04232E; --node: #000000; --ink: #CDD8DB; --muted: #9DB3BA; --soft: #8FA7AE;
+    --accent: #F67D99; --accent-tint: rgba(246, 125, 153, 0.12); --store: rgba(205, 216, 219, 0.06);
+    --rule: rgba(205, 216, 219, 0.16); --rule-strong: rgba(205, 216, 219, 0.30); --panel: #000000;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #04232E; --node: #000000; --ink: #CDD8DB; --muted: #9DB3BA; --soft: #8FA7AE;
+  --accent: #F67D99; --accent-tint: rgba(246, 125, 153, 0.12); --store: rgba(205, 216, 219, 0.06);
+  --rule: rgba(205, 216, 219, 0.16); --rule-strong: rgba(205, 216, 219, 0.30); --panel: #000000;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: var(--sans); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 48px 80px;
+}
+main { max-width: 1320px; margin: 0 auto; display: flex; flex-direction: column; gap: 64px; }
+header, section { display: flex; flex-direction: column; gap: 14px; }
+.eyebrow { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); margin: 0; }
+h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(32px, 4vw, 48px); line-height: 1.1; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.2; margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 72ch; }
+.lede { font-size: 18px; color: var(--muted); }
+code { font-family: var(--mono); font-size: .86em; }
+.diagram-container { width: 100%; overflow-x: auto; }
+.diagram-container svg { display: block; width: 100%; height: auto; }
+#round svg { min-width: 1320px; }
+#verdict svg { min-width: 960px; }
+#lever svg { min-width: 1200px; }
+
+/* SVG roles */
+.bg { fill: var(--paper); }
+.mask { fill: var(--paper); }
+.node { fill: var(--node); stroke: var(--ink); stroke-width: 1; }
+.focal { fill: var(--accent-tint); stroke: var(--accent); stroke-width: 1; }
+.store { fill: var(--store); stroke: var(--muted); stroke-width: 1; }
+.nm { font-family: var(--sans); font-size: 12px; font-weight: 600; fill: var(--ink); }
+.sub { font-family: var(--mono); font-size: 9px; fill: var(--muted); }
+.al { font-family: var(--mono); font-size: 8px; letter-spacing: .06em; fill: var(--soft); }
+.eye { font-family: var(--mono); font-size: 9px; font-weight: 500; letter-spacing: .18em; fill: var(--muted); }
+.eye-sm { font-family: var(--mono); font-size: 8px; letter-spacing: .1em; fill: var(--soft); }
+.tag { fill: none; stroke: var(--muted); stroke-width: .8; }
+.tag-f { fill: none; stroke: var(--accent); stroke-width: .8; }
+.tagt { font-family: var(--mono); font-size: 8px; font-weight: 600; fill: var(--muted); }
+.tagt-f { font-family: var(--mono); font-size: 8px; font-weight: 600; fill: var(--accent); }
+.edge { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+.dash { stroke-dasharray: 5 4; }
+.lead { fill: none; stroke: var(--rule-strong); stroke-width: .8; stroke-dasharray: 2 3; }
+.rule { stroke: var(--rule); stroke-width: 1; }
+.rule-strong { stroke: var(--rule-strong); stroke-width: 1; }
+.head { fill: var(--muted); }
+.callout { font-family: var(--serif); font-style: italic; font-size: 14px; fill: var(--muted); }
+.leg { font-family: var(--sans); font-size: 9px; fill: var(--muted); }
+
+table { border-collapse: collapse; font-size: 14px; width: 100%; min-width: 520px; font-variant-numeric: tabular-nums; background: var(--panel); border-radius: 8px; overflow: hidden; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--mono); font-size: 10px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+td.num { font-family: var(--mono); font-size: 13px; }
+.table-wrap { overflow-x: auto; max-width: 760px; }
+.note { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 18px 22px; max-width: 760px; display: flex; flex-direction: column; gap: 10px; }
+.note b { font-weight: 600; }
+.note ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+.note li::marker { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.small { font-size: 14px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Week 2 Day 5 lab · Self-improvement</p>
+    <h1>The improver loop</h1>
+    <p class="lede">An agent improves the claim agent one round at a time. You approve every change, and code the improver can't edit decides whether the change is kept.</p>
+  </header>
+
+  <!-- ============ 1. ONE ROUND (swimlane) ============ -->
+  <section id="round">
+    <p class="eyebrow">Swimlane · Parts 3 and 4</p>
+    <h2>One round, in nine steps</h2>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1320 496" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="round-title round-desc">
+        <title id="round-title">One round of the improver loop</title>
+        <desc id="round-desc">Swimlane of one improvement round: the improver reads results and proposes a change, you approve it, 25 claim agents run and are scored, code keeps or rolls back the version, then the improver rewrites its recipe, you approve it, and round 2 starts.</desc>
+        <defs>
+          <marker id="round-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="head"/></marker>
+        </defs>
+        <rect width="100%" height="100%" class="bg"/>
+
+        <!-- lanes -->
+        <line x1="40" y1="64" x2="1280" y2="64" class="rule-strong"/>
+        <line x1="40" y1="168" x2="1280" y2="168" class="rule"/>
+        <line x1="40" y1="272" x2="1280" y2="272" class="rule"/>
+        <line x1="40" y1="376" x2="1280" y2="376" class="rule-strong"/>
+        <line x1="148" y1="64" x2="148" y2="376" class="rule-strong"/>
+        <text x="40" y="112" class="eye">YOU</text>
+        <text x="40" y="126" class="eye-sm">APPROVE</text>
+        <text x="40" y="216" class="eye">IMPROVER</text>
+        <text x="40" y="230" class="eye-sm">LUNA · MEDIUM</text>
+        <text x="40" y="320" class="eye">CODE</text>
+        <text x="40" y="334" class="eye-sm">FIXED RULES</text>
+
+        <!-- arrows first -->
+        <path d="M296,220 H324" class="edge" marker-end="url(#round-arrow)"/>
+        <path d="M392,192 V124 Q392,116 400,116 H488" class="edge" marker-end="url(#round-arrow)"/>
+        <path d="M624,116 H712 Q720,116 720,124 V192" class="edge" marker-end="url(#round-arrow)"/>
+        <path d="M720,248 V296" class="edge" marker-end="url(#round-arrow)"/>
+        <path d="M788,324 H816" class="edge" marker-end="url(#round-arrow)"/>
+        <path d="M952,324 H980" class="edge" marker-end="url(#round-arrow)"/>
+        <path d="M1048,296 V248" class="edge" marker-end="url(#round-arrow)"/>
+        <path d="M1048,192 V124 Q1048,116 1056,116 H1144" class="edge" marker-end="url(#round-arrow)"/>
+        <path d="M1212,88 V56 Q1212,48 1204,48 H236 Q228,48 228,56 V192" class="edge dash" marker-end="url(#round-arrow)"/>
+
+        <!-- arrow labels -->
+        <rect x="400" y="150" width="44" height="12" rx="2" class="mask"/>
+        <text x="422" y="159" class="al" text-anchor="middle">PAUSES</text>
+        <rect x="728" y="150" width="48" height="12" rx="2" class="mask"/>
+        <text x="752" y="159" class="al" text-anchor="middle">APPROVE</text>
+        <rect x="728" y="266" width="44" height="12" rx="2" class="mask"/>
+        <text x="750" y="275" class="al" text-anchor="middle">3 RUNS</text>
+        <rect x="1056" y="266" width="52" height="12" rx="2" class="mask"/>
+        <text x="1082" y="275" class="al" text-anchor="middle">VERDICT</text>
+        <rect x="1056" y="150" width="44" height="12" rx="2" class="mask"/>
+        <text x="1078" y="159" class="al" text-anchor="middle">PAUSES</text>
+        <rect x="692" y="28" width="56" height="12" rx="2" class="mask"/>
+        <text x="720" y="37" class="al" text-anchor="middle">ROUND 2</text>
+
+        <!-- 01 read results -->
+        <rect x="160" y="192" width="136" height="56" rx="6" class="mask"/>
+        <rect x="160" y="192" width="136" height="56" rx="6" class="node"/>
+        <rect x="168" y="200" width="22" height="14" rx="2" class="tag"/>
+        <text x="179" y="210" class="tagt" text-anchor="middle">01</text>
+        <text x="228" y="228" class="nm" text-anchor="middle">Read results</text>
+        <text x="228" y="241" class="sub" text-anchor="middle">read_results</text>
+
+        <!-- 02 propose change -->
+        <rect x="324" y="192" width="136" height="56" rx="6" class="mask"/>
+        <rect x="324" y="192" width="136" height="56" rx="6" class="node"/>
+        <rect x="332" y="200" width="22" height="14" rx="2" class="tag"/>
+        <text x="343" y="210" class="tagt" text-anchor="middle">02</text>
+        <text x="392" y="228" class="nm" text-anchor="middle">Propose a change</text>
+        <text x="392" y="241" class="sub" text-anchor="middle">propose_change</text>
+
+        <!-- 03 approve change (focal) -->
+        <rect x="488" y="88" width="136" height="56" rx="6" class="mask"/>
+        <rect x="488" y="88" width="136" height="56" rx="6" class="focal"/>
+        <rect x="496" y="96" width="22" height="14" rx="2" class="tag-f"/>
+        <text x="507" y="106" class="tagt-f" text-anchor="middle">03</text>
+        <text x="556" y="124" class="nm" text-anchor="middle">Approve change</text>
+        <text x="556" y="137" class="sub" text-anchor="middle">diff + reason</text>
+
+        <!-- 04 run evaluation -->
+        <rect x="652" y="192" width="136" height="56" rx="6" class="mask"/>
+        <rect x="652" y="192" width="136" height="56" rx="6" class="node"/>
+        <rect x="660" y="200" width="22" height="14" rx="2" class="tag"/>
+        <text x="671" y="210" class="tagt" text-anchor="middle">04</text>
+        <text x="720" y="228" class="nm" text-anchor="middle">Run evaluation</text>
+        <text x="720" y="241" class="sub" text-anchor="middle">run_evaluation</text>
+
+        <!-- 05 claim agents -->
+        <rect x="652" y="296" width="136" height="56" rx="6" class="mask"/>
+        <rect x="652" y="296" width="136" height="56" rx="6" class="node"/>
+        <rect x="660" y="304" width="22" height="14" rx="2" class="tag"/>
+        <text x="671" y="314" class="tagt" text-anchor="middle">05</text>
+        <text x="720" y="332" class="nm" text-anchor="middle">25 claim agents</text>
+        <text x="720" y="345" class="sub" text-anchor="middle">dispatcher · Send</text>
+
+        <!-- 06 score -->
+        <rect x="816" y="296" width="136" height="56" rx="6" class="mask"/>
+        <rect x="816" y="296" width="136" height="56" rx="6" class="node"/>
+        <rect x="824" y="304" width="22" height="14" rx="2" class="tag"/>
+        <text x="835" y="314" class="tagt" text-anchor="middle">06</text>
+        <text x="884" y="332" class="nm" text-anchor="middle">Score each claim</text>
+        <text x="884" y="345" class="sub" text-anchor="middle">checks + Jev judge</text>
+
+        <!-- 07 keep or roll back (focal) -->
+        <rect x="980" y="296" width="136" height="56" rx="6" class="mask"/>
+        <rect x="980" y="296" width="136" height="56" rx="6" class="focal"/>
+        <rect x="988" y="304" width="22" height="14" rx="2" class="tag-f"/>
+        <text x="999" y="314" class="tagt-f" text-anchor="middle">07</text>
+        <text x="1048" y="332" class="nm" text-anchor="middle">Keep or roll back</text>
+        <text x="1048" y="345" class="sub" text-anchor="middle">held-out average</text>
+
+        <!-- 08 rewrite recipe -->
+        <rect x="980" y="192" width="136" height="56" rx="6" class="mask"/>
+        <rect x="980" y="192" width="136" height="56" rx="6" class="node"/>
+        <rect x="988" y="200" width="22" height="14" rx="2" class="tag"/>
+        <text x="999" y="210" class="tagt" text-anchor="middle">08</text>
+        <text x="1048" y="228" class="nm" text-anchor="middle">Rewrite recipe</text>
+        <text x="1048" y="241" class="sub" text-anchor="middle">propose_recipe</text>
+
+        <!-- 09 approve recipe -->
+        <rect x="1144" y="88" width="136" height="56" rx="6" class="mask"/>
+        <rect x="1144" y="88" width="136" height="56" rx="6" class="node"/>
+        <rect x="1152" y="96" width="22" height="14" rx="2" class="tag"/>
+        <text x="1163" y="106" class="tagt" text-anchor="middle">09</text>
+        <text x="1212" y="124" class="nm" text-anchor="middle">Approve recipe</text>
+        <text x="1212" y="137" class="sub" text-anchor="middle">diff + reason</text>
+
+        <!-- callouts -->
+        <line x1="228" y1="252" x2="228" y2="296" class="lead"/>
+        <text x="176" y="316" class="callout">The improver sees its mistakes on the evaluation set,</text>
+        <text x="176" y="334" class="callout">but only the scores from the held-out set.</text>
+        <line x1="1048" y1="356" x2="1048" y2="384" class="lead"/>
+        <text x="760" y="400" class="callout">Objectives, noise, tolerance, budget and allowed models</text>
+        <text x="760" y="418" class="callout">are set by the business and fixed in code.</text>
+
+        <!-- legend -->
+        <line x1="40" y1="440" x2="1280" y2="440" class="rule"/>
+        <text x="40" y="458" class="eye">LEGEND</text>
+        <rect x="40" y="470" width="14" height="10" rx="2" class="node"/>
+        <text x="60" y="478" class="leg">Step</text>
+        <rect x="120" y="470" width="14" height="10" rx="2" class="focal"/>
+        <text x="140" y="478" class="leg">Where the decision is made</text>
+        <rect x="292" y="468" width="22" height="14" rx="2" class="tag"/>
+        <text x="303" y="478" class="tagt" text-anchor="middle">01</text>
+        <text x="320" y="478" class="leg">Step order</text>
+        <path d="M400,475 H428" class="edge" marker-end="url(#round-arrow)"/>
+        <text x="436" y="478" class="leg">Flow</text>
+        <path d="M492,475 H520" class="edge dash" marker-end="url(#round-arrow)"/>
+        <text x="528" y="478" class="leg">Next round, with the new recipe</text>
+      </svg>
+    </div>
+    <p class="small">Step 05 runs the new version once on the evaluation set and twice on the held-out set. Steps 03 and 09 are <code>HumanInTheLoopMiddleware</code> pauses; resume with approve or reject.</p>
+  </section>
+
+  <!-- ============ 2. KEEP OR ROLL BACK (flowchart) ============ -->
+  <section id="verdict">
+    <p class="eyebrow">Flowchart · step 07 in detail</p>
+    <h2>Keep or roll back, in three checks</h2>
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 652" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="verdict-title verdict-desc">
+        <title id="verdict-title">How code keeps or rolls back a version</title>
+        <desc id="verdict-desc">Flowchart of three checks in order: a version that misses the objectives, gets worse beyond the tolerance, or improves nothing beyond the noise is rolled back; otherwise it is kept and becomes the current version.</desc>
+        <defs>
+          <marker id="verdict-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="head"/></marker>
+        </defs>
+        <rect width="100%" height="100%" class="bg"/>
+
+        <!-- arrows first -->
+        <path d="M360,80 V112" class="edge" marker-end="url(#verdict-arrow)"/>
+        <path d="M360,208 V248" class="edge" marker-end="url(#verdict-arrow)"/>
+        <path d="M360,344 V384" class="edge" marker-end="url(#verdict-arrow)"/>
+        <path d="M360,480 V520" class="edge" marker-end="url(#verdict-arrow)"/>
+        <path d="M480,160 H640" class="edge" marker-end="url(#verdict-arrow)"/>
+        <path d="M480,296 H640" class="edge" marker-end="url(#verdict-arrow)"/>
+        <path d="M480,432 H640" class="edge" marker-end="url(#verdict-arrow)"/>
+
+        <!-- labels -->
+        <rect x="368" y="222" width="28" height="12" rx="2" class="mask"/>
+        <text x="382" y="231" class="al" text-anchor="middle">YES</text>
+        <rect x="368" y="358" width="24" height="12" rx="2" class="mask"/>
+        <text x="380" y="367" class="al" text-anchor="middle">NO</text>
+        <rect x="368" y="494" width="28" height="12" rx="2" class="mask"/>
+        <text x="382" y="503" class="al" text-anchor="middle">YES</text>
+        <rect x="548" y="140" width="24" height="12" rx="2" class="mask"/>
+        <text x="560" y="149" class="al" text-anchor="middle">NO</text>
+        <rect x="546" y="276" width="28" height="12" rx="2" class="mask"/>
+        <text x="560" y="285" class="al" text-anchor="middle">YES</text>
+        <rect x="548" y="412" width="24" height="12" rx="2" class="mask"/>
+        <text x="560" y="421" class="al" text-anchor="middle">NO</text>
+
+        <!-- start -->
+        <rect x="240" y="32" width="240" height="48" rx="20" class="mask"/>
+        <rect x="240" y="32" width="240" height="48" rx="20" class="node"/>
+        <text x="360" y="54" class="nm" text-anchor="middle">New version</text>
+        <text x="360" y="68" class="sub" text-anchor="middle">held-out average of 2 runs</text>
+
+        <!-- check 1 -->
+        <rect x="196" y="152" width="24" height="16" rx="2" class="tag"/>
+        <text x="208" y="163" class="tagt" text-anchor="middle">1</text>
+        <polygon points="360,112 480,160 360,208 240,160" class="mask"/>
+        <polygon points="360,112 480,160 360,208 240,160" class="node"/>
+        <text x="360" y="158" class="nm" text-anchor="middle">Meets objectives?</text>
+        <text x="360" y="174" class="sub" text-anchor="middle">accuracy ≥ 0.6, grade ≥ 1.0</text>
+
+        <!-- check 2 -->
+        <rect x="196" y="288" width="24" height="16" rx="2" class="tag"/>
+        <text x="208" y="299" class="tagt" text-anchor="middle">2</text>
+        <polygon points="360,248 480,296 360,344 240,296" class="mask"/>
+        <polygon points="360,248 480,296 360,344 240,296" class="node"/>
+        <text x="360" y="294" class="nm" text-anchor="middle">Anything worse?</text>
+        <text x="360" y="310" class="sub" text-anchor="middle">beyond tolerance</text>
+
+        <!-- check 3 -->
+        <rect x="196" y="424" width="24" height="16" rx="2" class="tag"/>
+        <text x="208" y="435" class="tagt" text-anchor="middle">3</text>
+        <polygon points="360,384 480,432 360,480 240,432" class="mask"/>
+        <polygon points="360,384 480,432 360,480 240,432" class="node"/>
+        <text x="360" y="430" class="nm" text-anchor="middle">Anything better?</text>
+        <text x="360" y="446" class="sub" text-anchor="middle">beyond noise</text>
+
+        <!-- keep (focal) -->
+        <rect x="260" y="520" width="200" height="48" rx="20" class="mask"/>
+        <rect x="260" y="520" width="200" height="48" rx="20" class="focal"/>
+        <text x="360" y="542" class="nm" text-anchor="middle">Keep it</text>
+        <text x="360" y="556" class="sub" text-anchor="middle">becomes current version</text>
+
+        <!-- roll back -->
+        <rect x="640" y="112" width="240" height="368" rx="6" class="mask"/>
+        <rect x="640" y="112" width="240" height="368" rx="6" class="store"/>
+        <text x="760" y="290" class="nm" text-anchor="middle">Roll back</text>
+        <text x="760" y="306" class="sub" text-anchor="middle">current version stays</text>
+        <text x="760" y="320" class="sub" text-anchor="middle">reason saved in rounds</text>
+
+        <!-- callout -->
+        <text x="500" y="52" class="callout">Compared with the current</text>
+        <text x="500" y="70" class="callout">version's held-out average.</text>
+
+        <!-- legend -->
+        <line x1="40" y1="600" x2="920" y2="600" class="rule"/>
+        <text x="40" y="618" class="eye">LEGEND</text>
+        <polygon points="47,628 54,634 47,640 40,634" class="node"/>
+        <text x="60" y="638" class="leg">Check</text>
+        <rect x="112" y="629" width="14" height="10" rx="5" class="node"/>
+        <text x="132" y="638" class="leg">Start</text>
+        <rect x="180" y="629" width="14" height="10" rx="5" class="focal"/>
+        <text x="200" y="638" class="leg">Kept</text>
+        <rect x="244" y="629" width="14" height="10" rx="2" class="store"/>
+        <text x="264" y="638" class="leg">Rolled back</text>
+        <rect x="340" y="627" width="16" height="14" rx="2" class="tag"/>
+        <text x="348" y="637" class="tagt" text-anchor="middle">1</text>
+        <text x="362" y="638" class="leg">Order the checks run in</text>
+      </svg>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Score</th><th>Counts as better</th><th>Counts as worse</th></tr></thead>
+        <tbody>
+          <tr><td><code>accuracy</code></td><td class="num">+0.10 or more</td><td class="num">−0.10 or more</td></tr>
+          <tr><td><code>grade</code> (0 = F, 3 = A)</td><td class="num">+0.15 or more</td><td class="num">−0.15 or more</td></tr>
+          <tr><td><code>cost_per_claim</code></td><td class="num">15% cheaper</td><td class="num">over 2× the cost</td></tr>
+          <tr><td><code>seconds_per_claim</code></td><td class="num">15% faster</td><td class="num">25% slower</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small">From <code>NOISE</code> and <code>TOLERANCE</code> in the lab. Cost and time compare as a fraction of the old value; accuracy and grade compare as a difference.</p>
+  </section>
+
+  <!-- ============ 3. THE ASSIGNMENT ============ -->
+  <section id="lever">
+    <p class="eyebrow">Flow · your assignment</p>
+    <h2>A fourth option: which policy wording</h2>
+    <p>Today the improver can change the instructions, the model and the reasoning level. The challenge adds the policy wording as a fourth choice, so the improver can try <code>data/policy_wording_short.md</code>.</p>
+    <div class="diagram-container">
+      <svg viewBox="0 0 1200 344" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="lever-title lever-desc">
+        <title id="lever-title">Adding the policy wording as a choice</title>
+        <desc id="lever-desc">Flow of the assignment: the improver sees the wording options, proposes a version with a policy_wording choice checked against an allowed list, the version stores it, make_agent loads the full or short wording file, and the usual rule keeps the version if it is cheaper without losing quality.</desc>
+        <defs>
+          <marker id="lever-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" class="head"/></marker>
+        </defs>
+        <rect width="100%" height="100%" class="bg"/>
+
+        <!-- arrows first -->
+        <path d="M228,100 H264" class="edge" marker-end="url(#lever-arrow)"/>
+        <path d="M460,100 H496" class="edge" marker-end="url(#lever-arrow)"/>
+        <path d="M692,100 H728" class="edge" marker-end="url(#lever-arrow)"/>
+        <path d="M924,100 H960" class="edge" marker-end="url(#lever-arrow)"/>
+        <path d="M362,196 V128" class="edge" marker-end="url(#lever-arrow)"/>
+        <path d="M826,196 V128" class="edge" marker-end="url(#lever-arrow)"/>
+
+        <rect x="370" y="156" width="56" height="12" rx="2" class="mask"/>
+        <text x="398" y="165" class="al" text-anchor="middle">CHECKED</text>
+        <rect x="834" y="156" width="64" height="12" rx="2" class="mask"/>
+        <text x="866" y="165" class="al" text-anchor="middle">PICKS ONE</text>
+
+        <!-- 01 -->
+        <rect x="32" y="72" width="196" height="56" rx="6" class="mask"/>
+        <rect x="32" y="72" width="196" height="56" rx="6" class="node"/>
+        <rect x="40" y="80" width="22" height="14" rx="2" class="tag"/>
+        <text x="51" y="90" class="tagt" text-anchor="middle">01</text>
+        <text x="130" y="108" class="nm" text-anchor="middle">Read the options</text>
+        <text x="130" y="121" class="sub" text-anchor="middle">read_results: full, short</text>
+
+        <!-- 02 (focal) -->
+        <rect x="264" y="72" width="196" height="56" rx="6" class="mask"/>
+        <rect x="264" y="72" width="196" height="56" rx="6" class="focal"/>
+        <rect x="272" y="80" width="22" height="14" rx="2" class="tag-f"/>
+        <text x="283" y="90" class="tagt-f" text-anchor="middle">02</text>
+        <text x="362" y="108" class="nm" text-anchor="middle">Propose a version</text>
+        <text x="362" y="121" class="sub" text-anchor="middle">+ policy_wording argument</text>
+
+        <!-- 03 -->
+        <rect x="496" y="72" width="196" height="56" rx="6" class="mask"/>
+        <rect x="496" y="72" width="196" height="56" rx="6" class="node"/>
+        <rect x="504" y="80" width="22" height="14" rx="2" class="tag"/>
+        <text x="515" y="90" class="tagt" text-anchor="middle">03</text>
+        <text x="594" y="108" class="nm" text-anchor="middle">Save the version</text>
+        <text x="594" y="121" class="sub" text-anchor="middle">versions[n].policy_wording</text>
+
+        <!-- 04 -->
+        <rect x="728" y="72" width="196" height="56" rx="6" class="mask"/>
+        <rect x="728" y="72" width="196" height="56" rx="6" class="node"/>
+        <rect x="736" y="80" width="22" height="14" rx="2" class="tag"/>
+        <text x="747" y="90" class="tagt" text-anchor="middle">04</text>
+        <text x="826" y="108" class="nm" text-anchor="middle">Build the agent</text>
+        <text x="826" y="121" class="sub" text-anchor="middle">make_agent loads the file</text>
+
+        <!-- 05 -->
+        <rect x="960" y="72" width="196" height="56" rx="6" class="mask"/>
+        <rect x="960" y="72" width="196" height="56" rx="6" class="node"/>
+        <rect x="968" y="80" width="22" height="14" rx="2" class="tag"/>
+        <text x="979" y="90" class="tagt" text-anchor="middle">05</text>
+        <text x="1058" y="108" class="nm" text-anchor="middle">Keep or roll back</text>
+        <text x="1058" y="121" class="sub" text-anchor="middle">kept if 15% cheaper</text>
+
+        <!-- allowed list -->
+        <rect x="264" y="196" width="196" height="56" rx="6" class="mask"/>
+        <rect x="264" y="196" width="196" height="56" rx="6" class="store"/>
+        <text x="362" y="220" class="nm" text-anchor="middle">Allowed wordings</text>
+        <text x="362" y="236" class="sub" text-anchor="middle">ALLOWED_WORDINGS: full, short</text>
+
+        <!-- wording files (focal) -->
+        <rect x="728" y="196" width="196" height="64" rx="6" class="mask"/>
+        <rect x="728" y="196" width="196" height="64" rx="6" class="focal"/>
+        <text x="826" y="218" class="nm" text-anchor="middle">Wording files</text>
+        <text x="826" y="234" class="sub" text-anchor="middle">policy_wording.md · 1,369 words</text>
+        <text x="826" y="248" class="sub" text-anchor="middle">…_short.md · 808 words</text>
+
+        <!-- callouts -->
+        <text x="40" y="220" class="callout">The short file has 41% fewer words,</text>
+        <text x="40" y="238" class="callout">so every claim sends fewer tokens.</text>
+        <text x="968" y="220" class="callout">Accuracy and grade still have</text>
+        <text x="968" y="238" class="callout">to stay within tolerance.</text>
+
+        <!-- legend -->
+        <line x1="32" y1="292" x2="1168" y2="292" class="rule"/>
+        <text x="32" y="310" class="eye">LEGEND</text>
+        <rect x="32" y="320" width="14" height="10" rx="2" class="node"/>
+        <text x="52" y="328" class="leg">Step</text>
+        <rect x="104" y="320" width="14" height="10" rx="2" class="focal"/>
+        <text x="124" y="328" class="leg">What you add</text>
+        <rect x="212" y="320" width="14" height="10" rx="2" class="store"/>
+        <text x="232" y="328" class="leg">Rule or data</text>
+        <rect x="316" y="318" width="22" height="14" rx="2" class="tag"/>
+        <text x="327" y="328" class="tagt" text-anchor="middle">01</text>
+        <text x="344" y="328" class="leg">Step order</text>
+      </svg>
+    </div>
+    <div class="note">
+      <b>The notebook edits, in order</b>
+      <ol>
+        <li>Load both wording files into a dict, and add <code>"policy_wording": "full"</code> to version 1.</li>
+        <li>Give <code>propose_change</code> a <code>policy_wording</code> argument and refuse values outside the allowed list, the same way it refuses models.</li>
+        <li>Store the choice on the version, and add it to <code>rounds</code> and <code>show_rounds</code>.</li>
+        <li>In <code>make_agent</code>, build the system prompt from the version's wording, not the global <code>policy_wording</code>.</li>
+        <li>List the wording choices in <code>read_results</code> so the improver knows it can change them.</li>
+      </ol>
+      <p class="small">The names <code>ALLOWED_WORDINGS</code> and <code>policy_wording</code> as a config field are suggestions. The lab doesn't define them.</p>
+    </div>
+  </section>
+</main>
+</body>
+</html>
